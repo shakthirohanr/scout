@@ -1,0 +1,48 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start PostgreSQL (Docker)",
+			"type": "shell",
+			"command": "docker start kimiagent-postgres >/dev/null 2>&1 || docker run --name kimiagent-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=cryptoagent -p 5432:5432 -d postgres:16",
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Frontend",
+			"type": "shell",
+			"command": "npm run dev",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Backend (Postgres)",
+			"type": "shell",
+			"command": "uv run ctf-api",
+			"options": {
+				"cwd": "${workspaceFolder}/backend",
+				"env": {
+					"POSTGRES_URL": "postgresql://postgres:postgres@127.0.0.1:5432/cryptoagent",
+					"PYTHONPATH": "${workspaceFolder}"
+				}
+			},
+			"isBackground": true,
+			"dependsOn": [
+				"Start PostgreSQL (Docker)"
+			],
+			"dependsOrder": "sequence",
+			"problemMatcher": []
+		},
+		{
+			"label": "Start App (Frontend + Backend)",
+			"dependsOn": [
+				"Start Frontend",
+				"Start Backend (Postgres)"
+			],
+			"dependsOrder": "parallel",
+			"problemMatcher": []
+		}
+	]
+}
