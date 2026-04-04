@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import { unstable_cache } from "next/cache";
 import path from "path";
 
 import { formatTraceForTerminal } from "@/lib/terminal";
@@ -6,6 +7,7 @@ import type { TraceDetail, TraceEvent, TraceStatus, TraceSummary } from "@/lib/t
 
 const REPO_ROOT = path.resolve(process.cwd(), "..");
 const LOGS_DIRECTORY = path.resolve(REPO_ROOT, "logs");
+const TRACE_SUMMARIES_TAG = "trace-summaries";
 
 function isSafeTraceId(traceId: string): boolean {
   return /^[a-zA-Z0-9._-]+\.jsonl$/.test(traceId);
@@ -153,6 +155,11 @@ export async function hasLogsDirectory(): Promise<boolean> {
 }
 
 export async function getTraceSummaries(): Promise<TraceSummary[]> {
+  return getCachedTraceSummaries();
+}
+
+const getCachedTraceSummaries = unstable_cache(
+  async (): Promise<TraceSummary[]> => {
   if (!(await hasLogsDirectory())) {
     return [];
   }
@@ -178,7 +185,10 @@ export async function getTraceSummaries(): Promise<TraceSummary[]> {
     .sort((left, right) => {
       return (Date.parse(right.updatedAt ?? "") || 0) - (Date.parse(left.updatedAt ?? "") || 0);
     });
-}
+  },
+  ["trace-summaries"],
+  { revalidate: 2, tags: [TRACE_SUMMARIES_TAG] },
+);
 
 export async function getTraceDetail(
   traceId: string,

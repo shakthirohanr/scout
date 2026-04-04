@@ -326,6 +326,16 @@ class ClaudeSolver:
                         duration_seconds=time.monotonic() - t0,
                     )
 
+                    # Emit cumulative usage every result turn so the UI can show live token/cost updates.
+                    agent_usage = self.cost_tracker.by_agent.get(self.agent_name)
+                    if agent_usage:
+                        self.tracer.usage(
+                            agent_usage.usage.input_tokens,
+                            agent_usage.usage.output_tokens,
+                            agent_usage.usage.cache_read_tokens,
+                            agent_usage.cost_usd,
+                        )
+
                     output = getattr(message, "structured_output", None)
                     if output:
                         if output.get("type") == "flag_found":

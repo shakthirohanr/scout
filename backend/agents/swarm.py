@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.agents.solver import Solver
@@ -66,6 +69,8 @@ class ChallengeSwarm:
     _submitted_flags: set[str] = field(default_factory=set)  # dedup exact flags
     _last_submit_time: dict[str, float] = field(default_factory=dict)  # per-model last submit timestamp
     message_bus: ChallengeMessageBus = field(default_factory=ChallengeMessageBus)
+    steering_messages: list[str] = field(default_factory=list)
+    _steering_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
     def _create_solver(self, model_spec: str):
         """Create the right solver type based on provider.
@@ -195,6 +200,10 @@ class ChallengeSwarm:
         solver = self._create_solver(model_spec)
         self.solvers[model_spec] = solver
 
+        if self.steering_messages:
+            combined = "\n\n".join(self.steering_messages[-5:])
+            solver.bump(combined)
+
         try:
             result, final_solver = await self._run_solver_loop(solver, model_spec)
             solver = final_solver
@@ -292,8 +301,76 @@ class ChallengeSwarm:
 
         return result, solver
 
+    async def _steering_loop(self, steering_path: Path) -> None:
+        offset = 0
+        seen_ids: set[str] = set()
+
+        while not self.cancel_event.is_set():
+            try:
+                steering_path.parent.mkdir(parents=True, exist_ok=True)
+                steering_path.touch(exist_ok=True)
+                with open(steering_path, "r", encoding="utf-8") as handle:
+                    handle.seek(offset)
+                    payload = handle.read()
+                    offset = handle.tell()
+
+                if payload:
+                    for line in payload.splitlines():
+                        raw = line.strip()
+                        if not raw:
+                            continue
+                        try:
+                            event = json.loads(raw)
+                        except Exception:
+                            continue
+
+                        event_id = str(event.get("id") or "").strip()
+                        if event_id and event_id in seen_ids:
+                            continue
+
+                        message = str(event.get("message") or "").strip()
+                        if not message:
+                            continue
+
+                        if event_id:
+                            seen_ids.add(event_id)
+
+                        source = str(event.get("source") or "operator").strip() or "operator"
+                        steering_text = (
+                            "Operator steering received. Prioritize this guidance in your next attempt.\n\n"
+                            f"[{source}] {message}"
+                        )
+                        self.steering_messages.append(steering_text)
+                        if len(self.steering_messages) > 20:
+                            self.steering_messages = self.steering_messages[-20:]
+
+                        await self.message_bus.broadcast(f"[{source}] {message}", source="operator")
+
+                        for solver in self.solvers.values():
+                            solver.bump(steering_text)
+
+                        logger.info(
+                            "[%s] Applied operator steering to %d solver(s)",
+                            self.meta.name,
+                            len(self.solvers),
+                        )
+            except Exception as exc:
+                logger.warning("[%s] Steering loop error: %s", self.meta.name, exc)
+
+            try:
+                await asyncio.wait_for(self.cancel_event.wait(), timeout=1.0)
+            except TimeoutError:
+                continue
+
     async def run(self) -> SolverResult | None:
         """Run all solvers in parallel. Returns the winner's result or None."""
+        steering_path_value = os.environ.get("CTF_AGENT_STEERING_FILE", "").strip()
+        if steering_path_value:
+            self._steering_task = asyncio.create_task(
+                self._steering_loop(Path(steering_path_value)),
+                name=f"steering-{self.meta.name}",
+            )
+
         tasks = [
             asyncio.create_task(self._run_solver(spec), name=f"solver-{spec}")
             for spec in self.model_specs
@@ -326,6 +403,14 @@ class ChallengeSwarm:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             return None
+        finally:
+            if self._steering_task:
+                self._steering_task.cancel()
+                try:
+                    await self._steering_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                self._steering_task = None
 
     def kill(self) -> None:
         """Cancel all agents for this challenge."""

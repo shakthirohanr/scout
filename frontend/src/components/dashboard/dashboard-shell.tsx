@@ -9,6 +9,7 @@ import { ChallengeSidebar } from "@/components/dashboard/challenge-sidebar";
 import { LogTerminal } from "@/components/dashboard/log-terminal";
 import { OverviewCards } from "@/components/dashboard/overview-cards";
 import { SessionList } from "@/components/dashboard/session-list";
+import { SteeringPanel } from "@/components/dashboard/steering-panel";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { TraceOverview } from "@/components/dashboard/trace-overview";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -281,6 +282,8 @@ export function DashboardShell({
             </Card>
 
             <OverviewCards totals={totals} />
+
+            {activeChallengeId ? <SteeringPanel challengeId={activeChallengeId} /> : null}
 
             {filteredTraces.length > 1 ? (
               <Card className="rounded-none border-border/60 bg-card shadow-none">

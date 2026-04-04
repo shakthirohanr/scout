@@ -31,6 +31,11 @@ class StartChallengeRequest(BaseModel):
     launch_solver: bool = True
 
 
+class SteerChallengeRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    source: str = Field(default="operator", min_length=1, max_length=64)
+
+
 class CTFSourceSummary(BaseModel):
     id: int
     name: str

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { buildChallengeItems } from "@/lib/challenges";
 import type {
@@ -72,8 +72,15 @@ export function useLogDashboard(
   const [detailPending, setDetailPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const listRequestInFlight = useRef(false);
+  const detailRequestInFlight = useRef(false);
 
   const refreshTraceList = useEffectEvent(async () => {
+    if (listRequestInFlight.current) {
+      return;
+    }
+
+    listRequestInFlight.current = true;
     setListPending(true);
 
     try {
@@ -113,11 +120,17 @@ export function useLogDashboard(
           : "Unable to refresh trace list.",
       );
     } finally {
+      listRequestInFlight.current = false;
       setListPending(false);
     }
   });
 
   const refreshTraceDetail = useEffectEvent(async (traceId: string) => {
+    if (detailRequestInFlight.current) {
+      return;
+    }
+
+    detailRequestInFlight.current = true;
     setDetailPending(true);
 
     try {
@@ -136,11 +149,18 @@ export function useLogDashboard(
           : "Unable to refresh trace detail.",
       );
     } finally {
+      detailRequestInFlight.current = false;
       setDetailPending(false);
     }
   });
 
   async function refreshNow() {
+    if (listRequestInFlight.current || detailRequestInFlight.current) {
+      return;
+    }
+
+    listRequestInFlight.current = true;
+    detailRequestInFlight.current = true;
     setListPending(true);
     setDetailPending(true);
 
@@ -194,6 +214,8 @@ export function useLogDashboard(
           : "Unable to refresh trace dashboard.",
       );
     } finally {
+      listRequestInFlight.current = false;
+      detailRequestInFlight.current = false;
       setListPending(false);
       setDetailPending(false);
     }

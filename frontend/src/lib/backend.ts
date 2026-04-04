@@ -2,9 +2,13 @@ import type {
   ChallengeCatalogItem,
   CTFSourceSummary,
   ImportCTFInput,
+  SteeringChallengeResult,
 } from "@/lib/types";
+import { revalidateTag, unstable_cache } from "next/cache";
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8081";
+const CHALLENGE_CATALOG_TAG = "challenge-catalog";
+const CTF_SOURCES_TAG = "ctf-sources";
 
 type BackendCatalogItem = {
   id: string;
@@ -75,6 +79,15 @@ type BackendKillChallengeResponse = {
   generated_at: string;
 };
 
+type BackendSteerChallengeResponse = {
+  run_id: string;
+  challenge_id: string;
+  queued: string;
+  source: string;
+  created_at: string;
+  generated_at: string;
+};
+
 function backendBaseUrl(): string {
   return process.env.BACKEND_API_URL?.trim() || DEFAULT_BACKEND_URL;
 }
@@ -134,14 +147,30 @@ async function fetchBackend<T>(pathname: string, init?: RequestInit): Promise<T>
   return (await response.json()) as T;
 }
 
+const getCachedChallengeCatalog = unstable_cache(
+  async (): Promise<ChallengeCatalogItem[]> => {
+    const payload = await fetchBackend<BackendCatalogResponse>("/api/v1/challenges");
+    return payload.catalog.map(toCatalogItem);
+  },
+  ["challenge-catalog"],
+  { revalidate: 5, tags: [CHALLENGE_CATALOG_TAG] },
+);
+
+const getCachedCTFs = unstable_cache(
+  async (): Promise<CTFSourceSummary[]> => {
+    const payload = await fetchBackend<BackendCTFListResponse>("/api/v1/ctfs");
+    return payload.ctfs.map(toCTFSource);
+  },
+  ["ctf-sources"],
+  { revalidate: 10, tags: [CTF_SOURCES_TAG] },
+);
+
 export async function getChallengeCatalog(): Promise<ChallengeCatalogItem[]> {
-  const payload = await fetchBackend<BackendCatalogResponse>("/api/v1/challenges");
-  return payload.catalog.map(toCatalogItem);
+  return getCachedChallengeCatalog();
 }
 
 export async function getCTFs(): Promise<CTFSourceSummary[]> {
-  const payload = await fetchBackend<BackendCTFListResponse>("/api/v1/ctfs");
-  return payload.ctfs.map(toCTFSource);
+  return getCachedCTFs();
 }
 
 export async function importCTF(input: ImportCTFInput): Promise<{
@@ -163,6 +192,9 @@ export async function importCTF(input: ImportCTFInput): Promise<{
     }),
   });
 
+  revalidateTag(CTF_SOURCES_TAG);
+  revalidateTag(CHALLENGE_CATALOG_TAG);
+
   return {
     ctf: toCTFSource(payload.ctf),
     importedChallenges: payload.imported_challenges,
@@ -181,6 +213,9 @@ export async function startChallenge(
       launch_solver: true,
     }),
   });
+
+  revalidateTag(CHALLENGE_CATALOG_TAG);
+
   return {
     challenge: toCatalogItem(payload.challenge),
     run: payload.run ?? null,
@@ -197,9 +232,36 @@ export async function killChallenge(
     },
   );
 
+  revalidateTag(CHALLENGE_CATALOG_TAG);
+
   return {
     challenge: toCatalogItem(payload.challenge),
     cancelledCount: payload.termination?.cancelled_count ?? 0,
     containersRemoved: payload.termination?.containers_removed ?? 0,
+  };
+}
+
+export async function steerChallenge(
+  challengeId: string,
+  message: string,
+  source = "operator",
+): Promise<SteeringChallengeResult> {
+  const payload = await fetchBackend<BackendSteerChallengeResponse>(
+    `/api/v1/challenges/${encodeURIComponent(challengeId)}/steer`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        source,
+      }),
+    },
+  );
+
+  return {
+    runId: payload.run_id,
+    challengeId: payload.challenge_id,
+    queued: payload.queued,
+    source: payload.source,
+    createdAt: payload.created_at,
   };
 }

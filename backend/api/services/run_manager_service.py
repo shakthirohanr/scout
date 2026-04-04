@@ -6,6 +6,7 @@ import asyncio
 import collections
 import json
 import logging
+import os
 import signal
 import subprocess
 import threading
@@ -43,6 +44,7 @@ class ManagedRun:
     workdir: str
     output_log_path: str
     trace_ids_before: set[str]
+    steering_log_path: str | None = None
     challenge_id: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     started_at: datetime | None = None
@@ -94,6 +96,7 @@ class ManagedRun:
             "finished_at": as_iso(self.finished_at),
             "exit_code": self.exit_code,
             "output_log_path": self.output_log_path,
+            "steering_log_path": self.steering_log_path,
             "trace_ids": sorted(trace_ids_after),
         }
 
@@ -214,9 +217,14 @@ class RunManager:
 
         run_id = uuid.uuid4().hex[:12]
         output_log_path = logs_directory() / f"api-run-{run_id}.log"
+        steering_log_path = logs_directory() / f"steer-{run_id}.jsonl"
         output_log_path.parent.mkdir(parents=True, exist_ok=True)
+        steering_log_path.touch(exist_ok=True)
         command = build_cli_command(config, ctfd_url_override=settings.ctfd_url or config.ctfd_url)
         workdir = resolve_workdir(config)
+
+        process_env = os.environ.copy()
+        process_env["CTF_AGENT_STEERING_FILE"] = str(steering_log_path)
 
         output_handle = open(output_log_path, "a", encoding="utf-8")
         process = subprocess.Popen(
@@ -225,6 +233,7 @@ class RunManager:
             stdout=output_handle,
             stderr=subprocess.STDOUT,
             text=True,
+            env=process_env,
         )
 
         run = ManagedRun(
@@ -233,6 +242,7 @@ class RunManager:
             command=command,
             workdir=workdir,
             output_log_path=str(output_log_path),
+            steering_log_path=str(steering_log_path),
             trace_ids_before=self._current_trace_ids(),
             challenge_id=challenge_id,
             started_at=utcnow(),
@@ -344,6 +354,59 @@ class RunManager:
             "run_id": run_id,
             "log_path": run.output_log_path,
             "content": content,
+        }
+
+    def steer_challenge(self, challenge_id: str, message: str, source: str = "operator") -> dict[str, Any]:
+        text = message.strip()
+        if not text:
+            raise ValueError("message must not be empty")
+
+        with self._lock:
+            candidate_runs = [
+                run
+                for run in self._runs.values()
+                if run.challenge_id == challenge_id
+            ]
+
+        if not candidate_runs:
+            raise RuntimeError("No active run for this challenge.")
+
+        for run in candidate_runs:
+            run.refresh()
+
+        active_runs = [run for run in candidate_runs if run.status in {"starting", "running"}]
+        if not active_runs:
+            raise RuntimeError("No active run for this challenge.")
+
+        active_run = max(
+            active_runs,
+            key=lambda run: run.started_at or run.created_at,
+        )
+
+        if not active_run.steering_log_path:
+            raise RuntimeError("Steering is not available for the active run.")
+
+        steering_event = {
+            "id": uuid.uuid4().hex,
+            "ts": time.time(),
+            "type": "operator_steer",
+            "source": source.strip() or "operator",
+            "challenge_id": challenge_id,
+            "run_id": active_run.run_id,
+            "message": text,
+        }
+
+        steering_path = Path(active_run.steering_log_path)
+        steering_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(steering_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(steering_event, ensure_ascii=True) + "\n")
+
+        return {
+            "run_id": active_run.run_id,
+            "challenge_id": challenge_id,
+            "queued": text,
+            "source": steering_event["source"],
+            "created_at": datetime.fromtimestamp(steering_event["ts"], tz=timezone.utc).isoformat(),
         }
 
     def shutdown(self) -> None:

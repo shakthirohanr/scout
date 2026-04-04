@@ -6,7 +6,13 @@ import { type FormEvent, useMemo, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -70,6 +76,24 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
       );
     });
   }, [challenges, query]);
+
+  const groupedChallenges = useMemo(() => {
+    const grouped = new Map<string, ChallengeCatalogItem[]>();
+
+    for (const item of filtered) {
+      const key = item.ctfName || "Unknown CTF";
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.push(item);
+      } else {
+        grouped.set(key, [item]);
+      }
+    }
+
+    return Array.from(grouped.entries()).sort(([a], [b]) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [filtered]);
 
   function handleStart(challengeId: string) {
     setPendingId(challengeId);
@@ -370,61 +394,75 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
       ) : null}
 
       <main className="flex-1 pr-1">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {filtered.map((challenge) => {
-            const isStarting = pendingId === challenge.id;
-            return (
-              <Card
-                key={challenge.id}
-                className="rounded-lg border-border bg-card shadow-none"
-              >
-                <CardHeader className="space-y-3 pb-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <Badge variant="secondary" className="font-medium">
-                        {challenge.ctfName}
-                      </Badge>
-                      <CardTitle className="line-clamp-2 text-base text-card-foreground">
-                        {challenge.name}
-                      </CardTitle>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 gap-1.5"
-                      onClick={() => handleStart(challenge.id)}
-                      disabled={isStarting || isPending}
-                    >
-                      {isStarting ? (
-                        <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Play className="size-3.5" aria-hidden="true" />
-                      )}
-                      Solve
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="line-clamp-4 min-h-[5.2rem] text-sm text-muted-foreground">
-                    {challenge.description || "No description provided."}
-                  </p>
-                  <div className="space-y-1.5 text-xs text-muted-foreground">
-                    <p>Category: {challenge.category || "uncategorized"}</p>
-                    <p>Value: {challenge.value || 0}</p>
-                    <p>Distfiles: {challenge.distfileCount}</p>
-                    <p>Started: {formatStartedAt(challenge.startedAt)}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
         {!filtered.length ? (
           <div className="mt-8 rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">
             No challenges match your filter.
           </div>
-        ) : null}
+        ) : (
+          <div className="space-y-6">
+            {groupedChallenges.map(([ctfName, ctfChallenges]) => (
+              <Card key={ctfName} className="border-border bg-card shadow-none">
+                <CardHeader className="space-y-2 pb-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-lg text-card-foreground">{ctfName}</CardTitle>
+                    <Badge variant="secondary" className="font-medium">
+                      {ctfChallenges.length}
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    {ctfChallenges.length} challenge{ctfChallenges.length === 1 ? "" : "s"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {ctfChallenges.map((challenge) => {
+                      const isStarting = pendingId === challenge.id;
+                      return (
+                        <Card
+                          key={challenge.id}
+                          className="rounded-lg border-border bg-background shadow-none"
+                        >
+                          <CardHeader className="space-y-3 pb-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <CardTitle className="line-clamp-2 text-base text-card-foreground">
+                                {challenge.name}
+                              </CardTitle>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 gap-1.5"
+                                onClick={() => handleStart(challenge.id)}
+                                disabled={isStarting || isPending}
+                              >
+                                {isStarting ? (
+                                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <Play className="size-3.5" aria-hidden="true" />
+                                )}
+                                Solve
+                              </Button>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <p className="line-clamp-4 min-h-[5.2rem] text-sm text-muted-foreground">
+                              {challenge.description || "No description provided."}
+                            </p>
+                            <div className="space-y-1.5 text-xs text-muted-foreground">
+                              <p>Category: {challenge.category || "uncategorized"}</p>
+                              <p>Value: {challenge.value || 0}</p>
+                              <p>Distfiles: {challenge.distfileCount}</p>
+                              <p>Started: {formatStartedAt(challenge.startedAt)}</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

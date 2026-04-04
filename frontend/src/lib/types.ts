@@ -110,3 +110,11 @@ export type TraceListResponse = {
   generatedAt: string;
   logsDirectory: string;
 };
+
+export type SteeringChallengeResult = {
+  runId: string;
+  challengeId: string;
+  queued: string;
+  source: string;
+  createdAt: string;
+};

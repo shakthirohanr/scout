@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.api.database import session_scope
 from backend.api.repositories.ctf_repository import list_ctf_sources
 from backend.api.schemas import CTFImportRequest, StartChallengeRequest
+from backend.api.schemas import SteerChallengeRequest
 from backend.api.services.catalog_service import get_catalog_payload, start_challenge_run, stop_challenge_run
 from backend.api.services.ctfd_import_service import CTFImportError, import_ctf_challenges
 from backend.api.services.mappers import ctf_source_to_dict
@@ -57,6 +58,24 @@ def kill_challenge(challenge_id: str) -> dict[str, Any]:
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Challenge not found.") from exc
+
+@router.post("/challenges/{challenge_id}/steer")
+def steer_challenge(challenge_id: str, request: SteerChallengeRequest) -> dict[str, Any]:
+    try:
+        payload = RUN_MANAGER.steer_challenge(
+            challenge_id=challenge_id,
+            message=request.message,
+            source=request.source,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Challenge not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    payload["generated_at"] = _utcnow_iso()
+    return payload
 
 
 @router.get("/ctfs")
