@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Home, ListChecks, Menu, PanelLeft, PanelLeftClose } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_COLLAPSED_KEY = "cryptoagent-sidebar-collapsed";
+const SIDEBAR_PREFERENCE_EVENT = "cryptoagent-sidebar-preference-change";
 
 type NavItem = {
   href: string;
@@ -34,19 +35,49 @@ function navLinkClass(active: boolean, collapsed: boolean): string {
   );
 }
 
+function subscribeToSidebarPreference(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const handleChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener("storage", handleChange);
+  window.addEventListener(SIDEBAR_PREFERENCE_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener(SIDEBAR_PREFERENCE_EVENT, handleChange);
+  };
+}
+
+function getSidebarPreferenceSnapshot(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+}
+
+function getSidebarPreferenceServerSnapshot(): boolean {
+  return false;
+}
+
+function setSidebarPreference(collapsed: boolean): void {
+  window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+  window.dispatchEvent(new Event(SIDEBAR_PREFERENCE_EVENT));
+}
+
 export function SiteSidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
-  });
+  const collapsed = useSyncExternalStore(
+    subscribeToSidebarPreference,
+    getSidebarPreferenceSnapshot,
+    getSidebarPreferenceServerSnapshot,
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
-  }, [collapsed]);
 
   const navItems = useMemo<NavItem[]>(() => {
     const challengesActive = pathname === "/challenges" || pathname.startsWith("/challenge/");
@@ -88,7 +119,7 @@ export function SiteSidebar() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            onClick={() => setCollapsed((value) => !value)}
+            onClick={() => setSidebarPreference(!collapsed)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(collapsed && "hidden")}
           >
@@ -102,7 +133,7 @@ export function SiteSidebar() {
               type="button"
               variant="ghost"
               size="icon-sm"
-              onClick={() => setCollapsed(false)}
+              onClick={() => setSidebarPreference(false)}
               aria-label="Expand sidebar"
               className="w-full"
             >

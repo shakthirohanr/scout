@@ -10,6 +10,16 @@ const DEFAULT_BACKEND_URL = "http://127.0.0.1:8081";
 const CHALLENGE_CATALOG_TAG = "challenge-catalog";
 const CTF_SOURCES_TAG = "ctf-sources";
 
+export class BackendRequestError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "BackendRequestError";
+    this.status = status;
+  }
+}
+
 type BackendCatalogItem = {
   id: string;
   ctf_id: number;
@@ -22,7 +32,16 @@ type BackendCatalogItem = {
   connection_info: string;
   has_distfiles: boolean;
   distfile_count: number;
+  state: "idle" | "starting" | "running" | "solved" | "gave_up" | "cancelled" | "failed" | "finished";
+  run_count: number;
+  latest_run_id: string | null;
+  current_run_id: string | null;
+  latest_flag: string | null;
+  latest_log_path: string | null;
+  latest_trace_id: string | null;
+  steering_log_path: string | null;
   started_at: string | null;
+  finished_at: string | null;
   updated_at: string | null;
 };
 
@@ -79,6 +98,13 @@ type BackendKillChallengeResponse = {
   generated_at: string;
 };
 
+type BackendDeleteChallengeResponse = {
+  challenge: BackendCatalogItem;
+  deleted_runs: number;
+  files_removed: number;
+  generated_at: string;
+};
+
 type BackendSteerChallengeResponse = {
   run_id: string;
   challenge_id: string;
@@ -105,7 +131,16 @@ function toCatalogItem(item: BackendCatalogItem): ChallengeCatalogItem {
     connectionInfo: item.connection_info,
     hasDistfiles: item.has_distfiles,
     distfileCount: item.distfile_count,
+    state: item.state,
+    runCount: item.run_count,
+    latestRunId: item.latest_run_id,
+    currentRunId: item.current_run_id,
+    latestFlag: item.latest_flag,
+    latestLogPath: item.latest_log_path,
+    latestTraceId: item.latest_trace_id,
+    steeringLogPath: item.steering_log_path,
     startedAt: item.started_at,
+    finishedAt: item.finished_at,
     updatedAt: item.updated_at,
   };
 }
@@ -139,8 +174,16 @@ async function fetchBackend<T>(pathname: string, init?: RequestInit): Promise<T>
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(
-      body?.trim() || `Backend request failed: ${response.status} ${response.statusText}`,
+    let message = body?.trim() || `Backend request failed: ${response.status} ${response.statusText}`;
+    if (body) {
+      try {
+        const parsed = JSON.parse(body) as { detail?: string; error?: string };
+        message = parsed.detail || parsed.error || message;
+      } catch {}
+    }
+    throw new BackendRequestError(
+      response.status,
+      message,
     );
   }
 
@@ -192,8 +235,8 @@ export async function importCTF(input: ImportCTFInput): Promise<{
     }),
   });
 
-  revalidateTag(CTF_SOURCES_TAG);
-  revalidateTag(CHALLENGE_CATALOG_TAG);
+  revalidateTag(CTF_SOURCES_TAG, "max");
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
 
   return {
     ctf: toCTFSource(payload.ctf),
@@ -214,7 +257,7 @@ export async function startChallenge(
     }),
   });
 
-  revalidateTag(CHALLENGE_CATALOG_TAG);
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
 
   return {
     challenge: toCatalogItem(payload.challenge),
@@ -232,12 +275,31 @@ export async function killChallenge(
     },
   );
 
-  revalidateTag(CHALLENGE_CATALOG_TAG);
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
 
   return {
     challenge: toCatalogItem(payload.challenge),
     cancelledCount: payload.termination?.cancelled_count ?? 0,
     containersRemoved: payload.termination?.containers_removed ?? 0,
+  };
+}
+
+export async function deleteChallengeData(
+  challengeId: string,
+): Promise<{ challenge: ChallengeCatalogItem; deletedRuns: number; filesRemoved: number }> {
+  const payload = await fetchBackend<BackendDeleteChallengeResponse>(
+    `/api/v1/challenges/${encodeURIComponent(challengeId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
+
+  return {
+    challenge: toCatalogItem(payload.challenge),
+    deletedRuns: payload.deleted_runs ?? 0,
+    filesRemoved: payload.files_removed ?? 0,
   };
 }
 

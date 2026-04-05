@@ -13,27 +13,136 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from backend.api.database import session_scope
-from backend.api.repositories.run_repository import upsert_run
+from backend.api.repositories.ctf_repository import (
+    clear_challenge_session_data,
+    get_challenge_by_id,
+    sync_challenge_with_run,
+)
+from backend.api.repositories.run_repository import (
+    ACTIVE_RUN_STATUSES,
+    delete_runs_for_challenge,
+    get_run_by_id,
+    list_active_runs,
+    list_active_runs_for_challenge,
+    upsert_run,
+)
+from backend.api.repositories.run_repository import (
+    list_runs as list_persisted_runs,
+)
+from backend.api.services.mappers import solver_run_to_dict
 from backend.config import Settings
 from backend.log_reader import list_trace_summaries, logs_directory
 from backend.run_config import SolverRunConfig, build_cli_command, resolve_workdir
 from backend.sandbox import cleanup_challenge_containers
 
-
 logger = logging.getLogger(__name__)
+
+TERMINAL_TRACE_STATUS_TO_RUN_STATUS = {
+    "solved": "solved",
+    "gave_up": "gave_up",
+    "cancelled": "cancelled",
+    "error": "failed",
+}
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def as_iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
+
+
+def _timestamp_or_zero(value: str | None) -> float:
+    if not value:
+        return 0.0
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _is_pid_running(pid: int | None) -> bool:
+    if not pid or pid <= 0:
+        return False
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+    return True
+
+
+def _terminate_pid(pid: int | None) -> None:
+    if not pid or pid <= 0:
+        return
+    if not _is_pid_running(pid):
+        return
+
+    signal_plan = (
+        (signal.SIGINT, 5.0),
+        (signal.SIGTERM, 5.0),
+        (signal.SIGKILL, 2.0),
+    )
+    for sig, timeout_s in signal_plan:
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            return
+
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if not _is_pid_running(pid):
+                return
+            time.sleep(0.1)
+
+
+def _sort_trace_summaries_by_recency(summaries: list[Any]) -> list[Any]:
+    return sorted(
+        summaries,
+        key=lambda summary: _timestamp_or_zero(summary.updated_at),
+        reverse=True,
+    )
+
+
+def _build_trace_snapshot(
+    *,
+    trace_ids_before: set[str] | None = None,
+    trace_ids: list[str] | None = None,
+    challenge_name: str | None = None,
+) -> dict[str, Any]:
+    summaries = list_trace_summaries()
+    if trace_ids_before is not None:
+        relevant = [summary for summary in summaries if summary.id not in trace_ids_before]
+    elif trace_ids:
+        known_ids = set(trace_ids)
+        relevant = [summary for summary in summaries if summary.id in known_ids]
+    elif challenge_name:
+        relevant = [summary for summary in summaries if summary.challenge_name == challenge_name]
+    else:
+        relevant = []
+
+    ordered = _sort_trace_summaries_by_recency(relevant)
+    latest = ordered[0] if ordered else None
+    latest_flag = next((summary.flag for summary in ordered if summary.flag), None)
+    mapped_status = (
+        TERMINAL_TRACE_STATUS_TO_RUN_STATUS.get(latest.status) if latest is not None else None
+    )
+
+    return {
+        "trace_ids": [summary.id for summary in ordered],
+        "latest_trace_id": latest.id if latest else None,
+        "flag": latest_flag,
+        "trace_status": mapped_status,
+    }
 
 
 @dataclass(slots=True)
@@ -46,6 +155,8 @@ class ManagedRun:
     trace_ids_before: set[str]
     steering_log_path: str | None = None
     challenge_id: str | None = None
+    latest_trace_id: str | None = None
+    flag: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -56,33 +167,46 @@ class ManagedRun:
     _output_handle: Any = field(default=None, repr=False)
 
     def refresh(self) -> None:
-        if not self.process:
+        if self.process:
+            return_code = self.process.poll()
+            if return_code is None:
+                if self.status == "starting":
+                    self.status = "running"
+                return
+
+            self.exit_code = return_code
+            if self.finished_at is None:
+                self.finished_at = utcnow()
+            if self.status not in {"cancelled", "failed", "finished", "solved", "gave_up"}:
+                self.status = "finished" if return_code == 0 else "failed"
+            if self._output_handle is not None:
+                try:
+                    self._output_handle.close()
+                except Exception:
+                    pass
+                self._output_handle = None
             return
-        return_code = self.process.poll()
-        if return_code is None:
+
+        if _is_pid_running(self.pid):
             if self.status == "starting":
                 self.status = "running"
             return
 
-        self.exit_code = return_code
-        if self.finished_at is None:
-            self.finished_at = utcnow()
-        if self.status not in {"cancelled", "failed", "finished"}:
-            self.status = "finished" if return_code == 0 else "failed"
-        if self._output_handle is not None:
-            try:
-                self._output_handle.close()
-            except Exception:
-                pass
-            self._output_handle = None
+        if self.status in ACTIVE_RUN_STATUSES:
+            self.status = "finished"
+            self.finished_at = self.finished_at or utcnow()
 
     def snapshot(self) -> dict[str, Any]:
         self.refresh()
-        trace_ids_after = {
-            summary.id
-            for summary in list_trace_summaries()
-            if summary.id not in self.trace_ids_before
-        }
+        trace_snapshot = _build_trace_snapshot(trace_ids_before=self.trace_ids_before)
+        trace_status = trace_snapshot["trace_status"]
+        if trace_status and self.status not in {"cancelled", "gave_up"}:
+            self.status = trace_status
+            if trace_status not in ACTIVE_RUN_STATUSES:
+                self.finished_at = self.finished_at or utcnow()
+
+        self.latest_trace_id = trace_snapshot["latest_trace_id"]
+        self.flag = trace_snapshot["flag"]
         return {
             "run_id": self.run_id,
             "status": self.status,
@@ -97,7 +221,9 @@ class ManagedRun:
             "exit_code": self.exit_code,
             "output_log_path": self.output_log_path,
             "steering_log_path": self.steering_log_path,
-            "trace_ids": sorted(trace_ids_after),
+            "flag": self.flag,
+            "latest_trace_id": self.latest_trace_id,
+            "trace_ids": trace_snapshot["trace_ids"],
         }
 
 
@@ -112,7 +238,7 @@ class RunManager:
     def _persist_run(self, run: ManagedRun) -> None:
         snapshot = run.snapshot()
         with session_scope() as session:
-            upsert_run(
+            persisted_run = upsert_run(
                 session,
                 {
                     "id": run.run_id,
@@ -123,6 +249,9 @@ class RunManager:
                     "workdir": snapshot["workdir"],
                     "pid": snapshot["pid"],
                     "output_log_path": snapshot["output_log_path"],
+                    "steering_log_path": snapshot["steering_log_path"],
+                    "flag": snapshot["flag"],
+                    "latest_trace_id": snapshot["latest_trace_id"],
                     "trace_ids": snapshot["trace_ids"],
                     "exit_code": snapshot["exit_code"],
                     "created_at": run.created_at,
@@ -130,6 +259,108 @@ class RunManager:
                     "finished_at": run.finished_at,
                 },
             )
+            if run.challenge_id:
+                sync_challenge_with_run(
+                    session,
+                    challenge_id=run.challenge_id,
+                    run=persisted_run,
+                )
+
+    @staticmethod
+    def _snapshot_persisted_run(
+        run: Any,
+        challenge_name: str | None = None,
+    ) -> dict[str, Any]:
+        trace_ids = json.loads(run.trace_ids_json or "[]")
+        trace_snapshot = _build_trace_snapshot(
+            trace_ids=trace_ids,
+            challenge_name=challenge_name if not trace_ids else None,
+        )
+
+        status = str(run.status)
+        if status in ACTIVE_RUN_STATUSES and not _is_pid_running(run.pid):
+            status = trace_snapshot["trace_status"] or "finished"
+        elif trace_snapshot["trace_status"] and status not in {"cancelled", "gave_up"}:
+            status = trace_snapshot["trace_status"]
+
+        finished_at = run.finished_at
+        if status not in ACTIVE_RUN_STATUSES and finished_at is None:
+            finished_at = utcnow()
+
+        return {
+            "id": run.id,
+            "challenge_id": run.challenge_id,
+            "mode": run.mode,
+            "status": status,
+            "command": json.loads(run.command_json or "[]"),
+            "workdir": run.workdir,
+            "pid": run.pid if _is_pid_running(run.pid) else None,
+            "output_log_path": run.output_log_path,
+            "steering_log_path": run.steering_log_path,
+            "flag": trace_snapshot["flag"] or run.flag,
+            "latest_trace_id": trace_snapshot["latest_trace_id"] or run.latest_trace_id,
+            "trace_ids": trace_snapshot["trace_ids"] or trace_ids,
+            "exit_code": run.exit_code,
+            "created_at": run.created_at,
+            "started_at": run.started_at,
+            "finished_at": finished_at,
+        }
+
+    @staticmethod
+    def _persist_detached_run(
+        session,
+        run: Any,
+        challenge_name: str | None = None,
+    ) -> dict[str, Any]:
+        snapshot = RunManager._snapshot_persisted_run(run, challenge_name=challenge_name)
+        persisted_run = upsert_run(session, snapshot)
+        if persisted_run.challenge_id:
+            sync_challenge_with_run(
+                session,
+                challenge_id=persisted_run.challenge_id,
+                run=persisted_run,
+            )
+        return solver_run_to_dict(persisted_run)
+
+    @staticmethod
+    def _delete_run_artifacts(runs: list[Any], challenge_name: str | None = None) -> int:
+        removed = 0
+        trace_ids_from_runs: set[str] = set()
+        for run in runs:
+            try:
+                trace_ids_from_runs.update(json.loads(run.trace_ids_json or "[]"))
+            except Exception:
+                continue
+
+            for path_value in (run.output_log_path, run.steering_log_path):
+                path = Path(path_value).expanduser()
+                if not path_value or not path.exists():
+                    continue
+                try:
+                    path.unlink()
+                    removed += 1
+                except Exception:
+                    continue
+
+        trace_ids = trace_ids_from_runs
+        if challenge_name:
+            trace_ids.update(
+                summary.id
+                for summary in list_trace_summaries()
+                if summary.challenge_name == challenge_name
+            )
+
+        for trace_id in trace_ids:
+            path = logs_directory() / trace_id
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+                removed += 1
+            except Exception:
+                continue
+
+        return removed
 
     @staticmethod
     def _append_cancelled_finish_events(trace_ids: list[str]) -> None:
@@ -225,6 +456,8 @@ class RunManager:
 
         process_env = os.environ.copy()
         process_env["CTF_AGENT_STEERING_FILE"] = str(steering_log_path)
+        if challenge_id:
+            process_env["CTF_AGENT_CHALLENGE_ID"] = challenge_id
 
         output_handle = open(output_log_path, "a", encoding="utf-8")
         process = subprocess.Popen(
@@ -258,74 +491,120 @@ class RunManager:
         self._persist_run(run)
         return run.snapshot()
 
-    def list_runs(self) -> list[dict[str, Any]]:
+    def sync_runs(self) -> None:
         with self._lock:
-            runs = list(self._runs.values())
+            in_memory_runs = list(self._runs.values())
+            in_memory_run_ids = {run.run_id for run in in_memory_runs}
 
-        snapshots = [run.snapshot() for run in runs]
-        for run in runs:
+        for run in in_memory_runs:
             self._persist_run(run)
 
-        return sorted(
-            snapshots,
-            key=lambda item: item["started_at"] or item["created_at"],
-            reverse=True,
-        )
+        with session_scope() as session:
+            for persisted_run in list_active_runs(session):
+                if persisted_run.id in in_memory_run_ids:
+                    continue
+
+                challenge_name = None
+                if persisted_run.challenge_id:
+                    challenge = get_challenge_by_id(session, persisted_run.challenge_id)
+                    challenge_name = challenge.name if challenge else None
+                self._persist_detached_run(
+                    session,
+                    persisted_run,
+                    challenge_name=challenge_name,
+                )
+
+    def list_runs(self) -> list[dict[str, Any]]:
+        self.sync_runs()
+        with session_scope() as session:
+            runs = list_persisted_runs(session)
+            return [solver_run_to_dict(run) for run in runs]
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         with self._lock:
             run = self._runs.get(run_id)
-        if not run:
-            raise KeyError(run_id)
+        if run is not None:
+            self._persist_run(run)
+            return run.snapshot()
 
-        self._persist_run(run)
-        return run.snapshot()
+        with session_scope() as session:
+            persisted_run = get_run_by_id(session, run_id)
+            if persisted_run is None:
+                raise KeyError(run_id)
+
+            challenge_name = None
+            if persisted_run.challenge_id:
+                challenge = get_challenge_by_id(session, persisted_run.challenge_id)
+                challenge_name = challenge.name if challenge else None
+            return self._persist_detached_run(
+                session,
+                persisted_run,
+                challenge_name=challenge_name,
+            )
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         with self._lock:
             run = self._runs.get(run_id)
-        if not run:
-            raise KeyError(run_id)
-
-        run.refresh()
-        if run.process and run.process.poll() is None:
-            try:
-                run.process.send_signal(signal.SIGINT)
-                run.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                run.process.terminate()
+        if run is not None:
+            run.refresh()
+            if run.process and run.process.poll() is None:
                 try:
+                    run.process.send_signal(signal.SIGINT)
                     run.process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    run.process.kill()
-                    run.process.wait(timeout=5)
+                    run.process.terminate()
+                    try:
+                        run.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        run.process.kill()
+                        run.process.wait(timeout=5)
+            elif _is_pid_running(run.pid):
+                _terminate_pid(run.pid)
 
-        run.status = "cancelled"
-        run.finished_at = run.finished_at or utcnow()
-        run.exit_code = run.process.poll() if run.process else run.exit_code
-        cancelled_snapshot = run.snapshot()
-        self._append_cancelled_finish_events(cancelled_snapshot.get("trace_ids", []))
-        self._persist_run(run)
-        return run.snapshot()
+            run.status = "cancelled"
+            run.finished_at = run.finished_at or utcnow()
+            run.exit_code = run.process.poll() if run.process else run.exit_code
+            cancelled_snapshot = run.snapshot()
+            self._append_cancelled_finish_events(cancelled_snapshot.get("trace_ids", []))
+            self._persist_run(run)
+            return run.snapshot()
+
+        with session_scope() as session:
+            persisted_run = get_run_by_id(session, run_id)
+            if persisted_run is None:
+                raise KeyError(run_id)
+
+            challenge_name = None
+            if persisted_run.challenge_id:
+                challenge = get_challenge_by_id(session, persisted_run.challenge_id)
+                challenge_name = challenge.name if challenge else None
+
+            _terminate_pid(persisted_run.pid)
+            snapshot = self._snapshot_persisted_run(
+                persisted_run,
+                challenge_name=challenge_name,
+            )
+            snapshot["status"] = "cancelled"
+            snapshot["finished_at"] = snapshot["finished_at"] or utcnow()
+            self._append_cancelled_finish_events(snapshot["trace_ids"])
+            persisted_run = upsert_run(session, snapshot)
+            if persisted_run.challenge_id:
+                sync_challenge_with_run(
+                    session,
+                    challenge_id=persisted_run.challenge_id,
+                    run=persisted_run,
+                )
+            return solver_run_to_dict(persisted_run)
 
     def terminate_challenge(self, challenge_id: str, challenge_path: str | None = None) -> dict[str, Any]:
-        with self._lock:
-            runs = [
-                run
-                for run in self._runs.values()
-                if run.challenge_id == challenge_id
-            ]
-
-        active_run_ids: list[str] = []
-        for run in runs:
-            run.refresh()
-            if run.status in {"starting", "running"}:
-                active_run_ids.append(run.run_id)
+        self.sync_runs()
+        with session_scope() as session:
+            active_runs = list_active_runs_for_challenge(session, challenge_id)
 
         cancelled_runs: list[dict[str, Any]] = []
-        for run_id in active_run_ids:
+        for run in active_runs:
             try:
-                cancelled_runs.append(self.cancel(run_id))
+                cancelled_runs.append(self.cancel(run.id))
             except KeyError:
                 continue
 
@@ -336,23 +615,53 @@ class RunManager:
             "containers_removed": containers_removed,
         }
 
+    def delete_challenge_data(self, challenge_id: str) -> dict[str, Any]:
+        self.sync_runs()
+        with session_scope() as session:
+            challenge = get_challenge_by_id(session, challenge_id)
+            if challenge is None:
+                raise KeyError(challenge_id)
+            if challenge.state in ACTIVE_RUN_STATUSES:
+                raise RuntimeError("Challenge is still running. Kill it before deleting.")
+
+            challenge_name = challenge.name
+            runs = delete_runs_for_challenge(session, challenge_id)
+            cleared_challenge = clear_challenge_session_data(session, challenge_id)
+            challenge_payload = {
+                "challenge": cleared_challenge,
+                "deleted_runs": len(runs),
+            }
+
+        files_removed = self._delete_run_artifacts(runs, challenge_name=challenge_name)
+        return {
+            "challenge": challenge_payload["challenge"],
+            "deleted_runs": challenge_payload["deleted_runs"],
+            "files_removed": files_removed,
+        }
+
     def tail_output(self, run_id: str, lines: int = 200) -> dict[str, str]:
         with self._lock:
             run = self._runs.get(run_id)
-        if not run:
-            raise KeyError(run_id)
+        if run is not None:
+            run.refresh()
+            log_path = run.output_log_path
+            self._persist_run(run)
+        else:
+            with session_scope() as session:
+                persisted_run = get_run_by_id(session, run_id)
+                if persisted_run is None:
+                    raise KeyError(run_id)
+                log_path = persisted_run.output_log_path
 
-        run.refresh()
-        path = Path(run.output_log_path)
+        path = Path(log_path)
         if not path.exists():
             content = ""
         else:
             with open(path, encoding="utf-8") as handle:
                 content = "".join(collections.deque(handle, maxlen=max(lines, 1)))
-        self._persist_run(run)
         return {
             "run_id": run_id,
-            "log_path": run.output_log_path,
+            "log_path": log_path,
             "content": content,
         }
 
@@ -361,53 +670,41 @@ class RunManager:
         if not text:
             raise ValueError("message must not be empty")
 
-        with self._lock:
-            candidate_runs = [
-                run
-                for run in self._runs.values()
-                if run.challenge_id == challenge_id
-            ]
+        self.sync_runs()
+        with session_scope() as session:
+            active_runs = list_active_runs_for_challenge(session, challenge_id)
+            if not active_runs:
+                raise RuntimeError("No active run for this challenge.")
 
-        if not candidate_runs:
-            raise RuntimeError("No active run for this challenge.")
+            active_run = max(
+                active_runs,
+                key=lambda run: run.started_at or run.created_at,
+            )
+            if not active_run.steering_log_path:
+                raise RuntimeError("Steering is not available for the active run.")
 
-        for run in candidate_runs:
-            run.refresh()
+            steering_event = {
+                "id": uuid.uuid4().hex,
+                "ts": time.time(),
+                "type": "operator_steer",
+                "source": source.strip() or "operator",
+                "challenge_id": challenge_id,
+                "run_id": active_run.id,
+                "message": text,
+            }
 
-        active_runs = [run for run in candidate_runs if run.status in {"starting", "running"}]
-        if not active_runs:
-            raise RuntimeError("No active run for this challenge.")
+            steering_path = Path(active_run.steering_log_path)
+            steering_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(steering_path, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(steering_event, ensure_ascii=True) + "\n")
 
-        active_run = max(
-            active_runs,
-            key=lambda run: run.started_at or run.created_at,
-        )
-
-        if not active_run.steering_log_path:
-            raise RuntimeError("Steering is not available for the active run.")
-
-        steering_event = {
-            "id": uuid.uuid4().hex,
-            "ts": time.time(),
-            "type": "operator_steer",
-            "source": source.strip() or "operator",
-            "challenge_id": challenge_id,
-            "run_id": active_run.run_id,
-            "message": text,
-        }
-
-        steering_path = Path(active_run.steering_log_path)
-        steering_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(steering_path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(steering_event, ensure_ascii=True) + "\n")
-
-        return {
-            "run_id": active_run.run_id,
-            "challenge_id": challenge_id,
-            "queued": text,
-            "source": steering_event["source"],
-            "created_at": datetime.fromtimestamp(steering_event["ts"], tz=timezone.utc).isoformat(),
-        }
+            return {
+                "run_id": active_run.id,
+                "challenge_id": challenge_id,
+                "queued": text,
+                "source": steering_event["source"],
+                "created_at": datetime.fromtimestamp(steering_event["ts"], tz=UTC).isoformat(),
+            }
 
     def shutdown(self) -> None:
         with self._lock:

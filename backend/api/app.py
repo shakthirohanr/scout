@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +15,6 @@ from backend.api.routers.traces import router as traces_router
 from backend.api.services.system_service import project_version
 from backend.api.state import RUN_MANAGER
 
-
 DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3000",
@@ -25,7 +24,7 @@ DEFAULT_CORS_ORIGINS = [
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def create_app(cors_origins: list[str] | None = None) -> FastAPI:
@@ -46,6 +45,7 @@ def create_app(cors_origins: list[str] | None = None) -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         init_database()
+        RUN_MANAGER.sync_runs()
 
     @app.on_event("shutdown")
     def _shutdown() -> None:

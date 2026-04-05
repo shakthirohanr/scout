@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
-from typing import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from backend.config import Settings
@@ -74,4 +74,48 @@ def session_scope(settings: Settings | None = None) -> Iterator[Session]:
 def init_database(settings: Settings | None = None) -> None:
     from backend.api import db_models  # noqa: F401
 
-    Base.metadata.create_all(bind=get_engine(settings))
+    engine = get_engine(settings)
+    Base.metadata.create_all(bind=engine)
+    _apply_schema_updates(engine)
+
+
+def _apply_schema_updates(engine) -> None:
+    challenge_columns = {
+        "state": "VARCHAR(32) NOT NULL DEFAULT 'idle'",
+        "latest_run_id": "VARCHAR(64)",
+        "current_run_id": "VARCHAR(64)",
+        "latest_flag": "TEXT",
+        "latest_log_path": "VARCHAR(2048)",
+        "latest_trace_id": "VARCHAR(255)",
+        "steering_log_path": "VARCHAR(2048)",
+        "finished_at": "TIMESTAMP",
+    }
+    solver_run_columns = {
+        "steering_log_path": "VARCHAR(2048) NOT NULL DEFAULT ''",
+        "flag": "TEXT",
+        "latest_trace_id": "VARCHAR(255)",
+    }
+
+    _ensure_columns(engine, "challenges", challenge_columns)
+    _ensure_columns(engine, "solver_runs", solver_run_columns)
+
+
+def _ensure_columns(engine, table_name: str, columns: dict[str, str]) -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table(table_name):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+    missing_columns = {
+        name: definition
+        for name, definition in columns.items()
+        if name not in existing_columns
+    }
+    if not missing_columns:
+        return
+
+    with engine.begin() as connection:
+        for name, definition in missing_columns.items():
+            connection.execute(
+                text(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}")
+            )

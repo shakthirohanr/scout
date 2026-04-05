@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import time
 from pathlib import Path
 
@@ -55,4 +56,7 @@ class SolverTracer:
                       "cache_read_tokens": cache_read, "cost_usd": round(cost_usd, 6)})
 
     def event(self, kind: str, **kwargs) -> None:
+        challenge_id = os.environ.get("CTF_AGENT_CHALLENGE_ID", "").strip()
+        if challenge_id and "challenge_id" not in kwargs:
+            kwargs["challenge_id"] = challenge_id
         self._write({"type": kind, **kwargs})

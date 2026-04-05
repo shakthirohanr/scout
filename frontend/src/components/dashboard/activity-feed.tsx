@@ -56,10 +56,10 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
   const recentEvents = [...events].reverse().slice(0, 12);
 
   return (
-    <div className="border border-border/60 bg-card p-5 shadow-none">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="border border-border/60 bg-card p-6 md:p-7 shadow-none">
+      <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Recent activity</h2>
+          <h2 className="text-xl font-semibold text-foreground">Recent activity</h2>
         </div>
       </div>
 
@@ -72,14 +72,14 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
               <div key={`${event.ts}-${event.type}-${index}`} className="space-y-4">
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium capitalize text-foreground">
+                    <p className="text-base font-medium capitalize text-foreground">
                       {details.label}
                     </p>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-sm text-muted-foreground">
                       {formatEventTime(event.ts)}
                     </span>
                   </div>
-                  <p className="text-sm leading-6 text-muted-foreground">
+                  <p className="text-base leading-7 text-muted-foreground">
                     {details.detail}
                   </p>
                 </div>
@@ -89,7 +89,7 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
           })}
 
           {!recentEvents.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-4 py-10 text-center text-sm text-muted-foreground">
+            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-11 text-center text-base text-muted-foreground">
               Start a solver run to populate the activity feed.
             </div>
           ) : null}

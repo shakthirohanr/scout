@@ -44,9 +44,9 @@ export function OverviewCards({ totals }: OverviewCardsProps) {
             key={card.key}
             className="overflow-hidden rounded-none border-border/60 bg-card shadow-none"
           >
-            <CardContent className="flex items-start justify-between gap-4 p-5">
+            <CardContent className="flex items-start justify-between gap-4 p-6">
               <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">{card.label}</p>
+                <p className="text-base text-muted-foreground">{card.label}</p>
                 <p className="text-3xl font-semibold tracking-tight text-foreground">
                   {card.formatter(value)}
                 </p>

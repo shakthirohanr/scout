@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.api.db_models import CTFSource, Challenge, SolverRun
+from backend.api.db_models import Challenge, CTFSource, SolverRun
 
 
 def iso_or_none(value: datetime | None) -> str | None:
@@ -41,7 +41,16 @@ def challenge_to_dict(challenge: Challenge) -> dict[str, object]:
         "connection_info": challenge.connection_info,
         "has_distfiles": challenge.has_distfiles,
         "distfile_count": challenge.distfile_count,
+        "state": challenge.state,
+        "run_count": len(challenge.runs),
+        "latest_run_id": challenge.latest_run_id,
+        "current_run_id": challenge.current_run_id,
+        "latest_flag": challenge.latest_flag,
+        "latest_log_path": challenge.latest_log_path,
+        "latest_trace_id": challenge.latest_trace_id,
+        "steering_log_path": challenge.steering_log_path,
         "started_at": iso_or_none(challenge.started_at),
+        "finished_at": iso_or_none(challenge.finished_at),
         "updated_at": iso_or_none(challenge.updated_at),
     }
 
@@ -58,6 +67,9 @@ def solver_run_to_dict(run: SolverRun) -> dict[str, object]:
         "workdir": run.workdir,
         "pid": run.pid,
         "output_log_path": run.output_log_path,
+        "steering_log_path": run.steering_log_path,
+        "flag": run.flag,
+        "latest_trace_id": run.latest_trace_id,
         "trace_ids": json.loads(run.trace_ids_json or "[]"),
         "exit_code": run.exit_code,
         "created_at": iso_or_none(run.created_at),

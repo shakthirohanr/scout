@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ChallengeCatalogItem, ImportCTFInput } from "@/lib/types";
+import type { ChallengeCatalogItem, ChallengeRunState, ImportCTFInput } from "@/lib/types";
 
 type ChallengeHomeProps = {
   challenges: ChallengeCatalogItem[];
@@ -39,6 +39,35 @@ function formatStartedAt(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatChallengeState(state: ChallengeRunState): string {
+  if (state === "starting") {
+    return "Starting";
+  }
+  if (state === "running") {
+    return "Running";
+  }
+  if (state === "solved") {
+    return "Solved";
+  }
+  if (state === "gave_up") {
+    return "Gave up";
+  }
+  if (state === "cancelled") {
+    return "Cancelled";
+  }
+  if (state === "failed") {
+    return "Failed";
+  }
+  if (state === "finished") {
+    return "Finished";
+  }
+  return "Idle";
+}
+
+function isChallengeBusy(state: ChallengeRunState): boolean {
+  return state === "starting" || state === "running";
 }
 
 export function ChallengeHome({ challenges }: ChallengeHomeProps) {
@@ -201,10 +230,18 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
 
   return (
     <div className="flex min-h-full w-full flex-col bg-background px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">CryptoAgent</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+      <section
+        aria-labelledby="challenge-catalog-heading"
+        className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <div className="space-y-2">
+          <h1
+            id="challenge-catalog-heading"
+            className="text-3xl font-semibold tracking-tight text-foreground"
+          >
+            Challenge Catalog
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Import CTFs from CTFd, browse challenges, and launch the solver agent.
           </p>
         </div>
@@ -217,7 +254,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             className="h-10 border-input bg-background"
           />
         </div>
-      </header>
+      </section>
 
       <Card className="mb-6 border-border bg-card shadow-none">
         <CardHeader className="pb-4">
@@ -417,6 +454,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                     {ctfChallenges.map((challenge) => {
                       const isStarting = pendingId === challenge.id;
+                      const challengeBusy = isChallengeBusy(challenge.state);
                       return (
                         <Card
                           key={challenge.id}
@@ -432,14 +470,14 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                                 size="sm"
                                 className="h-8 gap-1.5"
                                 onClick={() => handleStart(challenge.id)}
-                                disabled={isStarting || isPending}
+                                disabled={isStarting || isPending || challengeBusy}
                               >
                                 {isStarting ? (
                                   <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                                 ) : (
                                   <Play className="size-3.5" aria-hidden="true" />
                                 )}
-                                Solve
+                                {challengeBusy ? "Running" : "Solve"}
                               </Button>
                             </div>
                           </CardHeader>
@@ -448,10 +486,12 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                               {challenge.description || "No description provided."}
                             </p>
                             <div className="space-y-1.5 text-xs text-muted-foreground">
+                              <p>Status: {formatChallengeState(challenge.state)}</p>
                               <p>Category: {challenge.category || "uncategorized"}</p>
                               <p>Value: {challenge.value || 0}</p>
                               <p>Distfiles: {challenge.distfileCount}</p>
                               <p>Started: {formatStartedAt(challenge.startedAt)}</p>
+                              {challenge.latestFlag ? <p>Flag: {challenge.latestFlag}</p> : null}
                             </div>
                           </CardContent>
                         </Card>

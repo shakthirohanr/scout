@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -12,7 +11,6 @@ import { SessionList } from "@/components/dashboard/session-list";
 import { SteeringPanel } from "@/components/dashboard/steering-panel";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { TraceOverview } from "@/components/dashboard/trace-overview";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -137,99 +135,22 @@ export function DashboardShell({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-background **:rounded-none">
-      <header className="shrink-0 border-b border-border/60 bg-[#e7eddc] dark:bg-background">
-        <div className="flex w-full items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="min-w-0">
-            <Link
-              href="/"
-              className="inline-block text-2xl font-semibold tracking-tight text-foreground transition-opacity hover:opacity-80 sm:text-3xl"
-            >
-              CryptoAgent
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {activeChallengeId ? (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleKillAgent}
-                disabled={killPending}
-              >
-                {killPending ? "Killing..." : "Kill Agent"}
-              </Button>
-            ) : null}
-
-            <Sheet>
-              <SheetTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="lg:hidden"
-                    aria-label="Open challenge list"
-                  />
-                }
-              >
-                Challenges
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[24rem] max-w-[90vw] p-0">
-                <SheetHeader className="border-b border-border/60 bg-[#e7eddc] px-5 py-4 text-left dark:bg-background">
-                  <SheetTitle>CryptoAgent</SheetTitle>
-                </SheetHeader>
-                <div className="h-[calc(100%-4.5rem)] p-4">
-                  <ChallengeSidebar
-                    challenges={sidebarChallenges}
-                    activeChallengeId={activeChallengeId}
-                  />
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="hidden lg:inline-flex"
-                    aria-label="Dashboard actions"
-                  />
-                }
-              >
-                View
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={8}>
-                <DropdownMenuItem onClick={() => setDesktopSidebarOpen((value) => !value)}>
-                  {desktopSidebarOpen ? "Hide sidebar" : "Show sidebar"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={refreshNow}>Refresh now</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={refreshNow}
-            >
-              Sync
-            </Button>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      <main className={`grid min-h-0 w-full flex-1 gap-6 px-4 py-6 sm:px-6 lg:px-8 ${desktopSidebarOpen ? "lg:grid-cols-[19rem_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)]"}`}>
+      <main
+        className={`grid min-h-0 w-full flex-1 gap-7 px-5 py-7 sm:px-7 sm:py-8 lg:px-10 ${
+          desktopSidebarOpen
+            ? "lg:grid-cols-[19rem_minmax(0,1fr)]"
+            : "lg:grid-cols-[minmax(0,1fr)]"
+        }`}
+      >
         <aside className={`min-h-0 ${desktopSidebarOpen ? "hidden lg:flex" : "hidden"}`}>
           <Card className="flex h-full min-h-0 w-full flex-col rounded-none border-border/60 bg-[#f0f4e6] shadow-none dark:bg-card">
-            <CardHeader className="border-b border-border/60 bg-[#e7eddc] px-4 py-4 dark:bg-background/40">
-              <CardTitle className="text-sm">CryptoAgent</CardTitle>
-              <CardDescription className="text-xs">
+            <CardHeader className="border-b border-border/60 bg-[#e7eddc] px-5 py-5 dark:bg-background/40">
+              <CardTitle className="text-base">Challenges</CardTitle>
+              <CardDescription className="text-sm">
                 Started and running challenges
               </CardDescription>
             </CardHeader>
-            <CardContent className="min-h-0 flex-1 p-4">
+            <CardContent className="min-h-0 flex-1 p-5">
               <ChallengeSidebar
                 challenges={sidebarChallenges}
                 activeChallengeId={activeChallengeId}
@@ -238,10 +159,102 @@ export function DashboardShell({
           </Card>
         </aside>
 
-        <section className="min-h-0 space-y-6 overflow-y-auto pr-1">
-          <div className="grid gap-6">
+        <section className="min-h-0 space-y-7 overflow-y-auto pr-1">
+          <div className="grid gap-7">
+            <section className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">
+                  Challenge workspace
+                </p>
+                <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+                  {activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Inspect trace output, steer the agent, and manage active sessions.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {activeChallengeId ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleKillAgent}
+                    disabled={killPending}
+                  >
+                    {killPending ? "Killing..." : "Kill Agent"}
+                  </Button>
+                ) : null}
+
+                <Sheet>
+                  <SheetTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="lg:hidden"
+                        aria-label="Open challenge list"
+                      />
+                    }
+                  >
+                    Challenges
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-[24rem] max-w-[90vw] p-0">
+                    <SheetHeader className="border-b border-border/60 bg-muted/30 px-5 py-4 text-left">
+                      <SheetTitle>Challenges</SheetTitle>
+                    </SheetHeader>
+                    <div className="h-[calc(100%-4.5rem)] p-4">
+                      <ChallengeSidebar
+                        challenges={sidebarChallenges}
+                        activeChallengeId={activeChallengeId}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="hidden lg:inline-flex"
+                        aria-label="Dashboard actions"
+                      />
+                    }
+                  >
+                    View
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" sideOffset={8}>
+                    <DropdownMenuItem onSelect={() => setDesktopSidebarOpen((value) => !value)}>
+                      {desktopSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={refreshNow}>Refresh now</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="hidden lg:inline-flex"
+                  onClick={() => setDesktopSidebarOpen((value) => !value)}
+                >
+                  {desktopSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={refreshNow}
+                >
+                  Sync
+                </Button>
+              </div>
+            </section>
+
             <Card className="rounded-none border-border/60 bg-[#f0f4e6] shadow-none dark:bg-card">
-              <CardHeader className="px-5 py-5 pb-3">
+              <CardHeader className="px-6 py-6 pb-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -250,23 +263,23 @@ export function DashboardShell({
                     <CardTitle className="text-xl font-semibold sm:text-2xl">
                       {selectedTrace
                         ? `${selectedTrace.challengeName} on ${selectedTrace.modelName}`
-                        : activeChallenge?.name ?? activeChallengeName ?? "CryptoAgent"}
+                        : activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
                     </CardTitle>
                   </div>
-                  <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                    <div className="border border-border/60 bg-[#e7eddc] px-4 py-3 dark:bg-background/40">
-                      <span className="block text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  <div className="grid gap-3 text-base text-muted-foreground sm:grid-cols-2">
+                    <div className="border border-border/60 bg-[#e7eddc] px-5 py-4 dark:bg-background/40">
+                      <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
                         Active file
                       </span>
-                      <span className="mt-1 block font-medium text-foreground">
+                      <span className="mt-1.5 block text-base font-medium text-foreground">
                         {selectedTrace?.fileName ?? "No file selected"}
                       </span>
                     </div>
-                    <div className="border border-border/60 bg-[#e7eddc] px-4 py-3 dark:bg-background/40">
-                      <span className="block text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    <div className="border border-border/60 bg-[#e7eddc] px-5 py-4 dark:bg-background/40">
+                      <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
                         Refresh state
                       </span>
-                      <span className="mt-1 block font-medium text-foreground">
+                      <span className="mt-1.5 block text-base font-medium text-foreground">
                         {listPending || detailPending ? "Refreshing…" : formatLastSync(lastSyncedAt)}
                       </span>
                     </div>
@@ -276,7 +289,7 @@ export function DashboardShell({
               {error || killError ? (
                 <CardContent className="px-5 pb-5 pt-0">
                   <Separator className="mb-5" />
-                  <p className="text-sm text-rose-600 dark:text-rose-300">{killError ?? error}</p>
+                  <p className="text-base text-rose-600 dark:text-rose-300">{killError ?? error}</p>
                 </CardContent>
               ) : null}
             </Card>
@@ -287,15 +300,15 @@ export function DashboardShell({
 
             {filteredTraces.length > 1 ? (
               <Card className="rounded-none border-border/60 bg-card shadow-none">
-                <CardHeader className="px-5 py-4 pb-2">
-                  <CardTitle className="text-base">Session Traces</CardTitle>
+                <CardHeader className="px-6 py-5 pb-3">
+                  <CardTitle className="text-lg">Session Traces</CardTitle>
                 </CardHeader>
-                <CardContent className="p-5 pt-0">
-                <SessionList
-                  traces={filteredTraces}
-                  selectedId={selectedId}
-                  onSelect={(traceId) => setSelectedId(traceId)}
-                />
+                <CardContent className="p-6 pt-0">
+                  <SessionList
+                    traces={filteredTraces}
+                    selectedId={selectedId}
+                    onSelect={(traceId) => setSelectedId(traceId)}
+                  />
                 </CardContent>
               </Card>
             ) : null}
@@ -308,16 +321,16 @@ export function DashboardShell({
               />
             ) : (
               <Card className="rounded-none border-dashed border-border/70 bg-card shadow-none">
-                <CardContent className="p-10 text-center">
+                <CardContent className="p-12 text-center">
                   <h2 className="text-xl font-semibold text-foreground">
-                    CryptoAgent
+                    No active session selected
                   </h2>
                 </CardContent>
               </Card>
             )}
           </div>
 
-          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <div className="grid gap-7 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <ActivityFeed events={detail?.events ?? []} />
             <TraceOverview trace={selectedTrace} detail={detail} />
           </div>

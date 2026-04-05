@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,24 +15,22 @@ from backend.api.repositories.ctf_repository import (
     get_or_create_ctf_source,
     list_challenges,
     list_ctf_sources,
-    mark_challenge_started,
-    mark_challenge_stopped,
     slugify,
     upsert_challenge,
 )
+from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES
 from backend.api.services.mappers import challenge_to_dict, ctf_source_to_dict
 from backend.api.services.run_manager_service import RunManager
 from backend.config import Settings
 from backend.local_challenges import list_local_challenges
 from backend.run_config import SolverRunConfig, load_ui_config
 
-
 LOCAL_SOURCE_NAME = "Local Challenges"
 LOCAL_SOURCE_URL = "local://filesystem"
 
 
 def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _is_under_any(path: Path, roots: list[Path]) -> bool:
@@ -106,8 +104,15 @@ def sync_local_catalog(challenges_root: str) -> None:
             )
 
 
-def get_catalog_payload(challenges_root: str, ctf_id: int | None = None) -> dict[str, Any]:
+def get_catalog_payload(
+    challenges_root: str,
+    *,
+    ctf_id: int | None = None,
+    run_manager: RunManager | None = None,
+) -> dict[str, Any]:
     sync_local_catalog(challenges_root)
+    if run_manager is not None:
+        run_manager.sync_runs()
 
     with session_scope() as session:
         sources_with_counts = list_ctf_sources(session)
@@ -133,11 +138,14 @@ def start_challenge_run(
 ) -> dict[str, Any]:
     settings = Settings()
     config = load_ui_config()
+    run_manager.sync_runs()
 
     with session_scope() as session:
-        challenge = mark_challenge_started(session, challenge_id)
+        challenge = get_challenge_by_id(session, challenge_id)
         if challenge is None:
             raise KeyError(challenge_id)
+        if challenge.state in ACTIVE_RUN_STATUSES:
+            raise RuntimeError("Challenge is already running. Kill it before starting again.")
         challenge_payload = challenge_to_dict(challenge)
 
     run_snapshot = None
@@ -157,6 +165,7 @@ def start_challenge_run(
             msg_port=config.msg_port,
         )
         run_snapshot = run_manager.start(run_config, settings, challenge_id=challenge_id)
+        challenge_payload = get_challenge_or_none(challenge_id) or challenge_payload
 
     return {
         "challenge": challenge_payload,
@@ -170,8 +179,9 @@ def stop_challenge_run(
     challenge_id: str,
     run_manager: RunManager,
 ) -> dict[str, Any]:
+    run_manager.sync_runs()
     with session_scope() as session:
-        challenge = mark_challenge_stopped(session, challenge_id)
+        challenge = get_challenge_by_id(session, challenge_id)
         if challenge is None:
             raise KeyError(challenge_id)
         challenge_payload = challenge_to_dict(challenge)
@@ -180,10 +190,35 @@ def stop_challenge_run(
         challenge_id=challenge_id,
         challenge_path=str(challenge_payload["path"]),
     )
+    challenge_payload = get_challenge_or_none(challenge_id) or challenge_payload
 
     return {
         "challenge": challenge_payload,
         "termination": termination,
+        "generated_at": utcnow_iso(),
+    }
+
+
+def delete_challenge_run_data(
+    *,
+    challenge_id: str,
+    run_manager: RunManager,
+) -> dict[str, Any]:
+    run_manager.sync_runs()
+    result = run_manager.delete_challenge_data(challenge_id)
+    challenge_payload = get_challenge_or_none(challenge_id)
+    challenge = challenge_payload or (
+        challenge_to_dict(result["challenge"])
+        if result["challenge"] is not None
+        else None
+    )
+    if challenge is None:
+        raise KeyError(challenge_id)
+
+    return {
+        "challenge": challenge,
+        "deleted_runs": result["deleted_runs"],
+        "files_removed": result["files_removed"],
         "generated_at": utcnow_iso(),
     }
 

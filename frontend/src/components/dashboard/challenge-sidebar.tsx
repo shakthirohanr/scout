@@ -40,17 +40,17 @@ export function ChallengeSidebar({
                 key={challenge.id}
                 href={`/challenge/${encodeURIComponent(challenge.id)}`}
                 className={cn(
-                  "block border p-4 text-left transition-colors",
+                  "block border p-5 text-left transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
                   isActive
                     ? "border-primary/35 bg-[#dfe7d2] dark:bg-accent/45"
                     : "border-border/60 bg-[#eef3e6] hover:border-primary/25 hover:bg-[#e7eddc] dark:bg-card/70 dark:hover:bg-card",
                 )}
               >
-                <p className="text-sm font-semibold leading-tight text-foreground">
+                <p className="text-base font-semibold leading-tight text-foreground">
                   {challenge.name}
                 </p>
-                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
                   <span>{challenge.traceCount} trace{challenge.traceCount === 1 ? "" : "s"}</span>
                   <span>{formatUpdatedAt(challenge.updatedAt)}</span>
                 </div>
@@ -59,7 +59,7 @@ export function ChallengeSidebar({
           })}
 
           {!challenges.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-4 py-8 text-center text-sm text-muted-foreground">
+            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-9 text-center text-base text-muted-foreground">
               No challenges available yet.
             </div>
           ) : null}

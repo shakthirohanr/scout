@@ -54,12 +54,16 @@ export function buildChallengeItems(
     items.push({
       id: catalogItem.id,
       name: catalogItem.name,
+      state: catalogItem.state,
       traceCount: challengeTraces.length,
       startedAt: catalogItem.startedAt,
+      finishedAt: catalogItem.finishedAt,
       updatedAt:
         timestampOrZero(traceUpdatedAt) > timestampOrZero(catalogItem.updatedAt)
           ? traceUpdatedAt
           : catalogItem.updatedAt,
+      latestFlag: catalogItem.latestFlag,
+      latestTraceId: catalogItem.latestTraceId,
       traces: challengeTraces,
     });
   }
@@ -71,9 +75,23 @@ export function buildChallengeItems(
     items.push({
       id: challengeTraces[0]?.challengeId || slugify(name),
       name,
+      state: challengeTraces.some((trace) => trace.status === "running")
+        ? "running"
+        : challengeTraces[0]?.status === "solved"
+          ? "solved"
+          : challengeTraces[0]?.status === "gave_up"
+            ? "gave_up"
+            : challengeTraces[0]?.status === "cancelled"
+              ? "cancelled"
+              : challengeTraces[0]?.status === "error"
+                ? "failed"
+                : "finished",
       traceCount: challengeTraces.length,
       startedAt: challengeTraces[0]?.startedAt ?? null,
+      finishedAt: null,
       updatedAt: challengeTraces[0]?.updatedAt ?? null,
+      latestFlag: challengeTraces.find((trace) => trace.flag)?.flag ?? null,
+      latestTraceId: challengeTraces[0]?.id ?? null,
       traces: challengeTraces,
     });
   }

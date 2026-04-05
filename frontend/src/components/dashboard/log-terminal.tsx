@@ -67,8 +67,8 @@ export function LogTerminal({
       cursorBlink: false,
       disableStdin: true,
       fontFamily: "var(--font-mono)",
-      fontSize: 13,
-      lineHeight: 1.35,
+      fontSize: 14,
+      lineHeight: 1.45,
       scrollback: 7000,
       theme: terminalThemes[activeTheme],
     });
@@ -135,13 +135,13 @@ export function LogTerminal({
 
   return (
     <Card className="gap-0 rounded-none border-border/60 bg-card py-0 shadow-none">
-      <CardHeader className="flex flex-col gap-4 border-b border-border/60 bg-[#e7eddc] px-5 py-4 md:flex-row md:items-center md:justify-between dark:bg-muted/35">
+      <CardHeader className="flex flex-col gap-5 border-b border-border/60 bg-[#e7eddc] px-6 py-5 md:flex-row md:items-center md:justify-between dark:bg-muted/35">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {summary ? <StatusBadge status={summary.status} /> : null}
           </div>
           <div>
-            <CardTitle className="text-lg font-semibold text-foreground">
+            <CardTitle className="text-xl font-semibold text-foreground">
               {summary ? `${summary.challengeName} · ${summary.modelName}` : "No trace selected"}
             </CardTitle>
           </div>
@@ -153,14 +153,14 @@ export function LogTerminal({
             onChange={(event) => setSearchValue(event.target.value)}
             placeholder="Search in trace output"
             aria-label="Search terminal output"
-            className="min-w-0 flex-1 border-border/60 bg-background/65 sm:w-72"
+            className="h-11 min-w-0 flex-1 border-border/60 bg-background/65 text-base sm:w-80"
           />
 
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              className="border-border/60 bg-background/65"
+              className="h-11 border-border/60 bg-background/65 px-4 text-base"
               onClick={() => {
                 const instance = instanceRef.current;
                 if (!instance || !searchValue.trim()) {
@@ -178,7 +178,7 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="border-border/60 bg-background/65"
+              className="h-11 border-border/60 bg-background/65 px-4 text-base"
               onClick={() => {
                 const instance = instanceRef.current;
                 if (!instance || !searchValue.trim()) {
@@ -196,7 +196,7 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="gap-2 border-border/60 bg-background/65"
+              className="h-11 gap-2 border-border/60 bg-background/65 px-4 text-base"
               onClick={onRefresh}
             >
               Refresh
@@ -208,7 +208,7 @@ export function LogTerminal({
       <CardContent className="terminal-shell relative p-0">
         <div
           ref={terminalRootRef}
-          className="h-120 w-full px-4 py-4 md:h-136"
+          className="h-120 w-full px-5 py-5 md:h-136"
           aria-label="Agent log terminal"
         />
       </CardContent>

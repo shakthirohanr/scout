@@ -2,27 +2,30 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.database import session_scope
 from backend.api.repositories.ctf_repository import list_ctf_sources
-from backend.api.schemas import CTFImportRequest, StartChallengeRequest
-from backend.api.schemas import SteerChallengeRequest
-from backend.api.services.catalog_service import get_catalog_payload, start_challenge_run, stop_challenge_run
+from backend.api.schemas import CTFImportRequest, StartChallengeRequest, SteerChallengeRequest
+from backend.api.services.catalog_service import (
+    delete_challenge_run_data,
+    get_catalog_payload,
+    start_challenge_run,
+    stop_challenge_run,
+)
 from backend.api.services.ctfd_import_service import CTFImportError, import_ctf_challenges
 from backend.api.services.mappers import ctf_source_to_dict
 from backend.api.state import RUN_MANAGER
 from backend.run_config import load_ui_config
 
-
 router = APIRouter(prefix="/api/v1", tags=["challenges"])
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @router.get("/challenges")
@@ -32,7 +35,11 @@ def challenges(
 ) -> dict[str, Any]:
     config = load_ui_config()
     challenges_root = root or config.challenges_dir
-    return get_catalog_payload(challenges_root, ctf_id=ctf_id)
+    return get_catalog_payload(
+        challenges_root,
+        ctf_id=ctf_id,
+        run_manager=RUN_MANAGER,
+    )
 
 
 @router.post("/challenges/start")
@@ -47,6 +54,8 @@ def start_challenge(request: StartChallengeRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Challenge not found.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/challenges/{challenge_id}/kill")
@@ -58,6 +67,21 @@ def kill_challenge(challenge_id: str) -> dict[str, Any]:
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Challenge not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/challenges/{challenge_id}")
+def delete_challenge(challenge_id: str) -> dict[str, Any]:
+    try:
+        return delete_challenge_run_data(
+            challenge_id=challenge_id,
+            run_manager=RUN_MANAGER,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Challenge not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @router.post("/challenges/{challenge_id}/steer")
 def steer_challenge(challenge_id: str, request: SteerChallengeRequest) -> dict[str, Any]:

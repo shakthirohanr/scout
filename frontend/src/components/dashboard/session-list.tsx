@@ -56,6 +56,7 @@ export function SessionList({
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Filter traces"
         aria-label="Filter traces"
+        className="h-11 text-base"
       />
 
       <ScrollArea className="mt-4 min-h-0 flex-1 pr-3">
@@ -70,7 +71,7 @@ export function SessionList({
                 aria-pressed={isActive}
                 onClick={() => onSelect(trace.id)}
                 className={cn(
-                  "group w-full border p-4 text-left transition-all",
+                  "group w-full border p-5 text-left transition-all",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
                   isActive
                     ? "border-primary/35 bg-[#dfe7d2]"
@@ -79,21 +80,21 @@ export function SessionList({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold leading-tight text-foreground">
+                    <p className="text-base font-semibold leading-tight text-foreground">
                       {trace.challengeName}
                     </p>
-                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
                       {trace.modelName}
                     </p>
                   </div>
                   <StatusBadge status={trace.status} className="shrink-0" />
                 </div>
 
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                <p className="mt-4 text-base leading-7 text-muted-foreground">
                   {trace.preview}
                 </p>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                   <span>{trace.eventCount} events</span>
                   <span>{formatUpdatedAt(trace.updatedAt)}</span>
                 </div>
@@ -102,7 +103,7 @@ export function SessionList({
           })}
 
           {!filteredTraces.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-4 py-8 text-center text-sm text-muted-foreground">
+            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-9 text-center text-base text-muted-foreground">
               No traces match this filter yet.
             </div>
           ) : null}

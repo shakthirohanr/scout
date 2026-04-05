@@ -96,7 +96,7 @@ function summarizeTrace(
   return {
     id: fileName,
     fileName,
-    challengeId: challengeName,
+    challengeId: String(startEvent?.challenge_id ?? challengeName),
     challengeName,
     modelName,
     status: inferStatus(events),

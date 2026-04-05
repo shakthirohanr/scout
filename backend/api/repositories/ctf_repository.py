@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from backend.api.db_models import CTFSource, Challenge, ChallengeFile
-
+from backend.api.db_models import Challenge, ChallengeFile, CTFSource, SolverRun
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def slugify(value: str) -> str:
@@ -99,7 +98,10 @@ def set_import_status(
 
 
 def list_challenges(session: Session, ctf_id: int | None = None) -> list[Challenge]:
-    stmt: Select[tuple[Challenge]] = select(Challenge).options(joinedload(Challenge.ctf_source))
+    stmt: Select[tuple[Challenge]] = select(Challenge).options(
+        joinedload(Challenge.ctf_source),
+        selectinload(Challenge.runs),
+    )
     if ctf_id is not None:
         stmt = stmt.where(Challenge.ctf_id == ctf_id)
     stmt = stmt.order_by(Challenge.name.asc())
@@ -109,27 +111,54 @@ def list_challenges(session: Session, ctf_id: int | None = None) -> list[Challen
 def get_challenge_by_id(session: Session, challenge_id: str) -> Challenge | None:
     stmt = (
         select(Challenge)
-        .options(joinedload(Challenge.ctf_source), joinedload(Challenge.files))
+        .options(
+            joinedload(Challenge.ctf_source),
+            joinedload(Challenge.files),
+            selectinload(Challenge.runs),
+        )
         .where(Challenge.id == challenge_id)
     )
     return session.execute(stmt).unique().scalar_one_or_none()
 
 
-def mark_challenge_started(session: Session, challenge_id: str) -> Challenge | None:
+def sync_challenge_with_run(
+    session: Session,
+    *,
+    challenge_id: str,
+    run: SolverRun,
+) -> Challenge | None:
     challenge = get_challenge_by_id(session, challenge_id)
     if not challenge:
         return None
-    challenge.started_at = _utcnow()
+
+    challenge.state = run.status
+    challenge.latest_run_id = run.id
+    challenge.current_run_id = run.id if run.status in {"starting", "running"} else None
+    challenge.latest_flag = run.flag
+    challenge.latest_log_path = run.output_log_path or None
+    challenge.latest_trace_id = run.latest_trace_id
+    challenge.steering_log_path = run.steering_log_path or None
+    challenge.started_at = run.started_at
+    challenge.finished_at = run.finished_at
     challenge.updated_at = _utcnow()
     session.flush()
     return challenge
 
 
-def mark_challenge_stopped(session: Session, challenge_id: str) -> Challenge | None:
+def clear_challenge_session_data(session: Session, challenge_id: str) -> Challenge | None:
     challenge = get_challenge_by_id(session, challenge_id)
     if not challenge:
         return None
+
+    challenge.state = "idle"
+    challenge.latest_run_id = None
+    challenge.current_run_id = None
+    challenge.latest_flag = None
+    challenge.latest_log_path = None
+    challenge.latest_trace_id = None
+    challenge.steering_log_path = None
     challenge.started_at = None
+    challenge.finished_at = None
     challenge.updated_at = _utcnow()
     session.flush()
     return challenge

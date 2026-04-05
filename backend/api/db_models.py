@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,7 +11,7 @@ from backend.api.database import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class CTFSource(Base):
@@ -64,7 +64,15 @@ class Challenge(Base):
     solves: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="idle")
+    latest_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    current_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    latest_flag: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latest_log_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    latest_trace_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    steering_log_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -106,6 +114,9 @@ class SolverRun(Base):
     workdir: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_log_path: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    steering_log_path: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    flag: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latest_trace_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     trace_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

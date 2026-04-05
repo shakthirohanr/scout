@@ -6,6 +6,16 @@ export type TraceStatus =
   | "error"
   | "unknown";
 
+export type ChallengeRunState =
+  | "idle"
+  | "starting"
+  | "running"
+  | "solved"
+  | "gave_up"
+  | "cancelled"
+  | "failed"
+  | "finished";
+
 export type TraceEvent = {
   ts: number;
   type: string;
@@ -17,6 +27,7 @@ export type TraceEvent = {
   status?: string;
   flag?: string | null;
   challenge?: string;
+  challenge_id?: string;
   model?: string;
   error?: string;
   input_tokens?: number;
@@ -51,9 +62,13 @@ export type TraceSummary = {
 export type ChallengeItem = {
   id: string;
   name: string;
+  state: ChallengeRunState;
   traceCount: number;
   startedAt: string | null;
+  finishedAt: string | null;
   updatedAt: string | null;
+  latestFlag: string | null;
+  latestTraceId: string | null;
   traces: TraceSummary[];
 };
 
@@ -69,7 +84,16 @@ export type ChallengeCatalogItem = {
   connectionInfo: string;
   hasDistfiles: boolean;
   distfileCount: number;
+  state: ChallengeRunState;
+  runCount: number;
+  latestRunId: string | null;
+  currentRunId: string | null;
+  latestFlag: string | null;
+  latestLogPath: string | null;
+  latestTraceId: string | null;
+  steeringLogPath: string | null;
   startedAt: string | null;
+  finishedAt: string | null;
   updatedAt: string | null;
 };
 

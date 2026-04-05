@@ -63,7 +63,16 @@ class ChallengeCatalogItem(BaseModel):
     connection_info: str
     has_distfiles: bool
     distfile_count: int
+    state: str
+    run_count: int
+    latest_run_id: str | None
+    current_run_id: str | None
+    latest_flag: str | None
+    latest_log_path: str | None
+    latest_trace_id: str | None
+    steering_log_path: str | None
     started_at: str | None
+    finished_at: str | None
     updated_at: str | None
 
 
@@ -77,14 +86,15 @@ class CTFImportRequest(BaseModel):
     challenges_root: str = "challenges"
 
     @model_validator(mode="after")
-    def validate_auth(self) -> "CTFImportRequest":
+    def validate_auth(self) -> CTFImportRequest:
         if self.auth_mode == "token" and not self.token.strip():
             raise ValueError("token is required when auth_mode=token")
-        if self.auth_mode == "credentials":
-            if not self.username.strip() or not self.password.strip():
-                raise ValueError(
-                    "username and password are required when auth_mode=credentials"
-                )
+        if self.auth_mode == "credentials" and (
+            not self.username.strip() or not self.password.strip()
+        ):
+            raise ValueError(
+                "username and password are required when auth_mode=credentials"
+            )
         return self
 
 
