@@ -18,6 +18,7 @@ LOGS_DIR = REPO_ROOT / "logs"
 class TraceSummary:
     id: str
     file_name: str
+    challenge_id: str | None
     challenge_name: str
     model_name: str
     status: str
@@ -127,6 +128,10 @@ def summarize_trace(file_name: str, events: list[dict[str, Any]]) -> TraceSummar
     latest_usage = usage_events[-1] if usage_events else {}
     last_event = events[-1] if events else None
     finish_event = next((event for event in reversed(events) if event.get("type") == "finish"), None)
+    challenge_id = next(
+        (str(event.get("challenge_id")) for event in events if event.get("challenge_id")),
+        None,
+    )
     fallback_name, fallback_model = _filename_fallback(file_name)
     last_step = max(
         int(event.get("step", 0))
@@ -137,6 +142,7 @@ def summarize_trace(file_name: str, events: list[dict[str, Any]]) -> TraceSummar
     return TraceSummary(
         id=file_name,
         file_name=file_name,
+        challenge_id=challenge_id,
         challenge_name=str(start_event.get("challenge", fallback_name) if start_event else fallback_name),
         model_name=str(start_event.get("model", fallback_model) if start_event else fallback_model),
         status=_infer_status(events),

@@ -117,14 +117,24 @@ def _build_trace_snapshot(
     *,
     trace_ids_before: set[str] | None = None,
     trace_ids: list[str] | None = None,
+    challenge_id: str | None = None,
     challenge_name: str | None = None,
+    run_started_at: datetime | None = None,
 ) -> dict[str, Any]:
     summaries = list_trace_summaries()
-    if trace_ids_before is not None:
-        relevant = [summary for summary in summaries if summary.id not in trace_ids_before]
-    elif trace_ids:
+    if trace_ids:
         known_ids = set(trace_ids)
         relevant = [summary for summary in summaries if summary.id in known_ids]
+    elif challenge_id:
+        relevant = [summary for summary in summaries if summary.challenge_id == challenge_id]
+        if run_started_at is not None:
+            started_ts = run_started_at.timestamp()
+            relevant = [
+                summary for summary in relevant
+                if _timestamp_or_zero(summary.updated_at) >= started_ts
+            ]
+    elif trace_ids_before is not None:
+        relevant = [summary for summary in summaries if summary.id not in trace_ids_before]
     elif challenge_name:
         relevant = [summary for summary in summaries if summary.challenge_name == challenge_name]
     else:
@@ -153,6 +163,7 @@ class ManagedRun:
     workdir: str
     output_log_path: str
     trace_ids_before: set[str]
+    trace_ids: list[str] = field(default_factory=list)
     steering_log_path: str | None = None
     challenge_id: str | None = None
     latest_trace_id: str | None = None
@@ -198,7 +209,12 @@ class ManagedRun:
 
     def snapshot(self) -> dict[str, Any]:
         self.refresh()
-        trace_snapshot = _build_trace_snapshot(trace_ids_before=self.trace_ids_before)
+        trace_snapshot = _build_trace_snapshot(
+            trace_ids=self.trace_ids,
+            trace_ids_before=None if self.trace_ids else self.trace_ids_before,
+            challenge_id=self.challenge_id,
+            run_started_at=self.started_at,
+        )
         trace_status = trace_snapshot["trace_status"]
         if trace_status and self.status not in {"cancelled", "gave_up"}:
             self.status = trace_status
@@ -221,6 +237,7 @@ class ManagedRun:
 
         self.latest_trace_id = trace_snapshot["latest_trace_id"]
         self.flag = trace_snapshot["flag"]
+        self.trace_ids = trace_snapshot["trace_ids"]
         return {
             "run_id": self.run_id,
             "status": self.status,
@@ -237,7 +254,7 @@ class ManagedRun:
             "steering_log_path": self.steering_log_path,
             "flag": self.flag,
             "latest_trace_id": self.latest_trace_id,
-            "trace_ids": trace_snapshot["trace_ids"],
+            "trace_ids": self.trace_ids,
         }
 
 
@@ -288,6 +305,8 @@ class RunManager:
         trace_ids = json.loads(run.trace_ids_json or "[]")
         trace_snapshot = _build_trace_snapshot(
             trace_ids=trace_ids,
+            challenge_id=run.challenge_id,
+            run_started_at=run.started_at,
             challenge_name=challenge_name if not trace_ids else None,
         )
 
@@ -467,6 +486,7 @@ class RunManager:
         steering_log_path.touch(exist_ok=True)
         command = build_cli_command(config, ctfd_url_override=settings.ctfd_url or config.ctfd_url)
         workdir = resolve_workdir(config)
+        trace_ids_before = self._current_trace_ids()
 
         process_env = os.environ.copy()
         process_env["CTF_AGENT_STEERING_FILE"] = str(steering_log_path)
@@ -490,7 +510,7 @@ class RunManager:
             workdir=workdir,
             output_log_path=str(output_log_path),
             steering_log_path=str(steering_log_path),
-            trace_ids_before=self._current_trace_ids(),
+            trace_ids_before=trace_ids_before,
             challenge_id=challenge_id,
             started_at=utcnow(),
             status="running",
