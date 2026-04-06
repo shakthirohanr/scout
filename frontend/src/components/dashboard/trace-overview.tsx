@@ -78,7 +78,7 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
           </div>
           <div className="border border-border/60 bg-[#e7eddc] p-5 dark:bg-background/40">
             <p className="text-base text-muted-foreground">Latest preview</p>
-            <p className="mt-2 text-base leading-7 text-foreground">
+            <p className="mt-2 text-base leading-7 break-all text-foreground">
               {trace.preview}
             </p>
           </div>

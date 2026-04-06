@@ -13,6 +13,7 @@ import type {
 const TRACE_POLL_MS = 5000;
 const DETAIL_POLL_MS = 3500;
 const DETAIL_LIMIT = 450;
+const TERMINAL_STATES = new Set(["solved", "gave_up", "cancelled", "failed", "finished"]);
 
 function getScopedTraces(
   traces: TraceSummary[],
@@ -225,6 +226,19 @@ export function useLogDashboard(
     void refreshTraceList();
 
     const intervalId = window.setInterval(() => {
+      // Stop polling if all scoped traces have reached a terminal state
+      const scopedTraces = getScopedTraces(
+        traces,
+        activeChallengeId,
+        activeChallengeName,
+        catalogChallenges,
+      );
+      const allTerminal =
+        scopedTraces.length > 0 &&
+        scopedTraces.every((t) => TERMINAL_STATES.has(t.status));
+      if (allTerminal) {
+        return;
+      }
       void refreshTraceList();
     }, TRACE_POLL_MS);
 
@@ -261,6 +275,11 @@ export function useLogDashboard(
     void refreshTraceDetail(selectedId);
 
     const intervalId = window.setInterval(() => {
+      // Stop polling detail if the selected trace is in a terminal state
+      const currentTrace = traces.find((t) => t.id === selectedId);
+      if (currentTrace && TERMINAL_STATES.has(currentTrace.status)) {
+        return;
+      }
       void refreshTraceDetail(selectedId);
     }, DETAIL_POLL_MS);
 

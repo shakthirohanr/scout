@@ -190,30 +190,14 @@ async function fetchBackend<T>(pathname: string, init?: RequestInit): Promise<T>
   return (await response.json()) as T;
 }
 
-const getCachedChallengeCatalog = unstable_cache(
-  async (): Promise<ChallengeCatalogItem[]> => {
-    const payload = await fetchBackend<BackendCatalogResponse>("/api/v1/challenges");
-    return payload.catalog.map(toCatalogItem);
-  },
-  ["challenge-catalog"],
-  { revalidate: 5, tags: [CHALLENGE_CATALOG_TAG] },
-);
-
-const getCachedCTFs = unstable_cache(
-  async (): Promise<CTFSourceSummary[]> => {
-    const payload = await fetchBackend<BackendCTFListResponse>("/api/v1/ctfs");
-    return payload.ctfs.map(toCTFSource);
-  },
-  ["ctf-sources"],
-  { revalidate: 10, tags: [CTF_SOURCES_TAG] },
-);
-
 export async function getChallengeCatalog(): Promise<ChallengeCatalogItem[]> {
-  return getCachedChallengeCatalog();
+  const payload = await fetchBackend<BackendCatalogResponse>("/api/v1/challenges");
+  return payload.catalog.map(toCatalogItem);
 }
 
 export async function getCTFs(): Promise<CTFSourceSummary[]> {
-  return getCachedCTFs();
+  const payload = await fetchBackend<BackendCTFListResponse>("/api/v1/ctfs");
+  return payload.ctfs.map(toCTFSource);
 }
 
 export async function importCTF(input: ImportCTFInput): Promise<{

@@ -354,7 +354,9 @@ class CTFdClient:
             base_url_str = (self.base_url or "").rstrip("/")
             url = raw_url if raw_url.startswith("http") else f"{base_url_str}/{raw_url.lstrip('/')}"
             url_path = urlparse(url).path
-            fname = url_path.rstrip("/").rsplit("/", 1)[-1] or "file"
+            # Strip any query params or fragments that may be embedded in the path segment
+            raw_fname = url_path.rstrip("/").rsplit("/", 1)[-1] or "file"
+            fname = raw_fname.split("?")[0].split("#")[0] or "file"
             dest = dist_dir / fname
             if not dest.exists():
                 try:
@@ -365,8 +367,17 @@ class CTFdClient:
                         follow_redirects=True, timeout=60.0,
                     )
                     resp.raise_for_status()
+
+                    # Prefer Content-Disposition filename if provided by the server
+                    cd = resp.headers.get("content-disposition", "")
+                    cd_match = re.search(r'filename\*?=["\']?(?:UTF-8\'\')?([^"\';\r\n]+)', cd, re.IGNORECASE)
+                    if cd_match:
+                        cd_fname = cd_match.group(1).strip().strip("\"'")
+                        if cd_fname:
+                            dest = dist_dir / cd_fname
+
                     dest.write_bytes(resp.content)
-                    logger.info(f"Downloaded: {fname} ({len(resp.content)} bytes)")
+                    logger.info(f"Downloaded: {dest.name} ({len(resp.content)} bytes)")
                 except Exception as e:
                     logger.warning(f"Failed to download {url}: {e}")
 

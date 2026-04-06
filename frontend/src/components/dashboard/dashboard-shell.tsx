@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { LogTerminal } from "@/components/dashboard/log-terminal";
-import { OverviewCards } from "@/components/dashboard/overview-cards";
 import { SessionList } from "@/components/dashboard/session-list";
 import { SteeringPanel } from "@/components/dashboard/steering-panel";
 import { StatusBadge } from "@/components/dashboard/status-badge";
@@ -96,11 +94,24 @@ export function DashboardShell({
     }
   }
 
+  const hasRunningTrace = filteredTraces.some((t) => t.status === "running");
+  const hasTerminalTrace = filteredTraces.some((t) =>
+    ["solved", "gave_up", "cancelled", "finished", "failed", "error"].includes(t.status)
+  );
+  
+  // The agent is considered running if:
+  // 1. We have a live trace explicitly saying it's running
+  // 2. OR the challenge is starting/running and we haven't yet received a terminal state update
+  const isAgentRunning =
+    hasRunningTrace ||
+    ((activeChallenge?.state === "starting" || activeChallenge?.state === "running") &&
+      !hasTerminalTrace);
+
   return (
-    <div className="flex min-h-full w-full flex-col bg-background px-4 py-6 sm:px-6 lg:px-8 **:rounded-none">
-      <main className="flex-1 pr-1">
-        <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-start">
-          <div className="space-y-7">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background px-4 py-6 sm:px-6 lg:px-8 **:rounded-none">
+      <main className="flex-1 min-h-0 pr-1">
+        <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] h-full min-h-0 items-start">
+          <div className="space-y-7 xl:order-last h-full overflow-hidden pr-2 pb-6 flex flex-col">
             <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-2">
               <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">
@@ -115,7 +126,7 @@ export function DashboardShell({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {activeChallengeId ? (
+              {activeChallengeId && isAgentRunning ? (
                 <Button
                   type="button"
                   variant="destructive"
@@ -139,7 +150,7 @@ export function DashboardShell({
 
             <Card className="rounded-none border-border/60 bg-[#f0f4e6] shadow-none dark:bg-card">
               <CardHeader className="px-6 py-6 pb-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {selectedTrace ? <StatusBadge status={selectedTrace.status} /> : null}
@@ -164,7 +175,7 @@ export function DashboardShell({
                         Refresh state
                       </span>
                       <span className="mt-1.5 block text-base font-medium text-foreground">
-                        {listPending || detailPending ? "Refreshing…" : formatLastSync(lastSyncedAt)}
+                        {formatLastSync(lastSyncedAt)}
                       </span>
                     </div>
                   </div>
@@ -177,8 +188,6 @@ export function DashboardShell({
                 </CardContent>
               ) : null}
             </Card>
-
-            <OverviewCards totals={totals} />
 
             {activeChallengeId ? <SteeringPanel challengeId={activeChallengeId} /> : null}
 
@@ -197,18 +206,18 @@ export function DashboardShell({
               </Card>
             ) : null}
 
-            <div className="grid gap-7 2xl:grid-cols-2">
-              <ActivityFeed events={detail?.events ?? []} />
+            <div className="flex flex-col">
               <TraceOverview trace={selectedTrace} detail={detail} />
             </div>
           </div>
 
-          <div className="sticky top-6">
+          <div className="xl:order-first h-full flex flex-col min-h-0">
             {filteredTraces.length ? (
               <LogTerminal
                 summary={selectedTrace}
                 content={detail?.terminalOutput ?? ""}
                 onRefresh={refreshNow}
+                className="h-full"
               />
             ) : (
               <Card className="rounded-none border-dashed border-border/70 bg-card shadow-none">

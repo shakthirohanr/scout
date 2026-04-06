@@ -153,7 +153,20 @@ class CTFdImportClient:
             if response.status_code != 200:
                 continue
 
-            filename = Path(raw_url).name or "file"
+            from urllib.parse import urlparse
+            url_path = urlparse(absolute_url).path
+            raw_fname = url_path.rstrip("/").rsplit("/", 1)[-1] or "file"
+            filename = raw_fname.split("?")[0].split("#")[0] or "file"
+
+            cd = response.headers.get("content-disposition", "")
+            if cd:
+                import re
+                cd_match = re.search(r'filename\*?=["\']?(?:UTF-8\'\')?([^"\';\r\n]+)', cd, re.IGNORECASE)
+                if cd_match:
+                    cd_fname = cd_match.group(1).strip().strip("\"'")
+                    if cd_fname:
+                        filename = cd_fname
+
             local_path = dist_dir / filename
             local_path.write_bytes(response.content)
             downloaded.append(

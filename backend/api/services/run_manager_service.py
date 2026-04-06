@@ -205,6 +205,20 @@ class ManagedRun:
             if trace_status not in ACTIVE_RUN_STATUSES:
                 self.finished_at = self.finished_at or utcnow()
 
+        # Auto-kill: if a flag was found and the process is still running, terminate it
+        if trace_snapshot["flag"] and self.status == "solved" and self.process and self.process.poll() is None:
+            logger.info("Flag found for run %s — auto-killing agent process", self.run_id)
+            try:
+                self.process.send_signal(signal.SIGINT)
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=2)
+            except Exception as exc:
+                logger.warning("Auto-kill failed for run %s: %s", self.run_id, exc)
+            self.finished_at = self.finished_at or utcnow()
+
         self.latest_trace_id = trace_snapshot["latest_trace_id"]
         self.flag = trace_snapshot["flag"]
         return {

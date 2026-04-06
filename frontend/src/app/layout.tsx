@@ -6,6 +6,7 @@ import { SiteSidebar } from "@/components/navigation/site-sidebar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import "./globals.css";
 import { getChallengeCatalog } from "@/lib/backend";
 import type { ChallengeCatalogItem } from "@/lib/types";
 

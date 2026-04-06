@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { useMounted } from "@/hooks/use-mounted";
 import { terminalThemes } from "@/lib/terminal";
 import type { TraceSummary } from "@/lib/types";
@@ -22,6 +23,7 @@ type LogTerminalProps = {
   summary: TraceSummary | null;
   content: string;
   onRefresh: () => void;
+  className?: string;
 };
 
 type TerminalInstance = {
@@ -35,6 +37,7 @@ export function LogTerminal({
   summary,
   content,
   onRefresh,
+  className,
 }: LogTerminalProps) {
   const mounted = useMounted();
   const { resolvedTheme } = useTheme();
@@ -44,16 +47,40 @@ export function LogTerminal({
   const [searchValue, setSearchValue] = useState("");
   const deferredSearch = useDeferredValue(searchValue);
 
+  const prevContentRef = useRef<string>("");
+
   const writeContent = useEffectEvent((nextContent: string) => {
     const instance = instanceRef.current;
     if (!instance) {
       return;
     }
 
-    instance.terminal.reset();
     instance.terminal.options.theme = terminalThemes[activeTheme];
-    instance.terminal.write(nextContent || "No trace output available yet.\n");
-    instance.terminal.scrollToBottom();
+    
+    const safeContent = nextContent || "No trace output available yet.\n";
+    const prevContent = prevContentRef.current;
+    
+    if (prevContent && safeContent.startsWith(prevContent)) {
+      const appended = safeContent.slice(prevContent.length);
+      if (appended) {
+        // Only auto-scroll if the viewport is currently at the bottom
+        // This prevents the scrollbar from jumping while the user is reading upwards
+        const buffer = instance.terminal.buffer.active;
+        const isAtBottom = buffer.viewportY === buffer.baseY;
+
+        instance.terminal.write(appended);
+
+        if (isAtBottom) {
+          instance.terminal.scrollToBottom();
+        }
+      }
+    } else {
+      instance.terminal.reset();
+      instance.terminal.write(safeContent);
+      instance.terminal.scrollToBottom();
+    }
+    
+    prevContentRef.current = safeContent;
   });
 
   useEffect(() => {
@@ -134,7 +161,7 @@ export function LogTerminal({
   }
 
   return (
-    <Card className="gap-0 rounded-none border-border/60 bg-card py-0 shadow-none">
+    <Card className={cn("gap-0 rounded-none flex flex-col border-border/60 bg-card py-0 shadow-none", className)}>
       <CardHeader className="flex flex-col gap-5 border-b border-border/60 bg-[#e7eddc] px-6 py-5 md:flex-row md:items-center md:justify-between dark:bg-muted/35">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -205,10 +232,10 @@ export function LogTerminal({
         </div>
       </CardHeader>
 
-      <CardContent className="terminal-shell relative p-0 overscroll-contain">
+      <CardContent className="terminal-shell relative p-0 flex-1 min-h-0 overscroll-contain">
         <div
           ref={terminalRootRef}
-          className="h-120 w-full px-5 py-5 md:h-136 xl:h-[calc(100vh-10rem)] overscroll-contain"
+          className="h-full w-full pl-5 py-5 overscroll-contain"
           aria-label="Agent log terminal"
         />
       </CardContent>
