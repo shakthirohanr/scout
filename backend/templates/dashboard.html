@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CTF Agent Dashboard</title>
+    <style>
+        :root { color-scheme: dark; }
+        body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1020; color: #e7ecff; }
+        header { padding: 20px 24px; border-bottom: 1px solid #24304f; background: linear-gradient(180deg, #101a33, #0b1020); }
+        h1 { margin: 0 0 8px; font-size: 22px; }
+        .sub { color: #9db0df; font-size: 13px; }
+        main { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; padding: 16px; }
+        .card { background: #111a30; border: 1px solid #24304f; border-radius: 14px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+        .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+        .pill { padding: 6px 10px; border-radius: 999px; background: #172342; border: 1px solid #2d3a5f; color: #d6defd; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #24304f; font-size: 13px; vertical-align: top; }
+        th { color: #97aae0; font-weight: 600; }
+        button { background: #2d66ff; color: white; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+        button.secondary { background: #22304f; }
+        button.danger { background: #ba3f3f; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        select, textarea, input { width: 100%; box-sizing: border-box; background: #0c1326; color: #e7ecff; border: 1px solid #2a3960; border-radius: 10px; padding: 8px; }
+        textarea { min-height: 84px; resize: vertical; }
+        pre { white-space: pre-wrap; word-break: break-word; background: #0c1326; border: 1px solid #2a3960; border-radius: 12px; padding: 12px; min-height: 220px; max-height: 500px; overflow: auto; }
+        .grid { display: grid; gap: 12px; }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .muted { color: #9db0df; }
+        .flag { color: #72f1b8; font-weight: 700; }
+        .small { font-size: 12px; }
+        .challenge-name { font-weight: 700; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>CTF Agent Dashboard</h1>
+        <div class="sub">Stop specific challenges, inspect traces, and watch solved flags appear here.</div>
+        <div id="stats" class="stats"></div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+                <strong>Active swarms</strong>
+                <div class="row">
+                    <button class="secondary" onclick="refreshState()">Refresh</button>
+                    <button class="secondary" onclick="loadTrace()">Load trace</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Challenge</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="activeRows"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+            </table>
+            <div style="margin-top: 14px;">
+                <strong>Stopped / paused</strong>
+                <table style="margin-top: 10px;">
+                    <thead>
+                        <tr><th>Challenge</th><th>Status</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="stoppedRows"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div style="margin-top: 14px;">
+                <div class="row">
+                    <div style="flex: 1; min-width: 220px;">
+                        <label class="small muted">Trace challenge</label>
+                        <select id="traceChallenge" onchange="loadTrace()"></select>
+                    </div>
+                    <div style="width: 180px;">
+                        <label class="small muted">Model</label>
+                        <select id="traceModel" onchange="loadTrace()"></select>
+                    </div>
+                    <div style="width: 90px;">
+                        <label class="small muted">Last N</label>
+                        <input id="traceCount" type="number" min="1" max="200" value="30" onchange="loadTrace()" />
+                    </div>
+                </div>
+            </div>
+            <pre id="traceBox">Select a challenge to view its latest trace.</pre>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <strong>Results / flags</strong>
+                <div id="results" class="grid" style="margin-top: 10px;"></div>
+            </div>
+            <div class="card">
+                <strong>Send operator message</strong>
+                <p class="muted small">Message goes directly to the coordinator inbox.</p>
+                <textarea id="messageBox" placeholder="Tell the coordinator what to do next…"></textarea>
+                <div class="row" style="margin-top: 10px;">
+                    <button onclick="sendMessage()">Send</button>
+                    <span id="messageStatus" class="muted small"></span>
+                </div>
+            </div>
+            <div class="card">
+                <strong>All known challenges</strong>
+                <div id="knownList" class="grid" style="margin-top: 10px;"></div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let lastState = null;
+
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        async function refreshState() {
+            const resp = await fetch('/api/state');
+            const state = await resp.json();
+            lastState = state;
+
+            const stats = document.getElementById('stats');
+            stats.innerHTML = `
+                <span class="pill">Active: ${state.active_count}</span>
+                <span class="pill">Stopped: ${state.stopped_count || 0}</span>
+                <span class="pill">Solved: ${state.solved_count}</span>
+                <span class="pill">Capacity: ${state.max_concurrent_challenges}</span>
+            `;
+
+            const activeRows = document.getElementById('activeRows');
+            if (!state.active.length) {
+                activeRows.innerHTML = '<tr><td colspan="3" class="muted">No active swarms.</td></tr>';
+            } else {
+                activeRows.innerHTML = state.active.map(item => {
+                    const winner = item.status && item.status.winner ? `<span class="flag">${esc(item.status.winner)}</span>` : '—';
+                    const models = item.models.length ? item.models.join(', ') : '—';
+                    return `
+                        <tr>
+                            <td>
+                                <div class="challenge-name">${esc(item.challenge)}</div>
+                                <div class="small muted">${esc(item.category || '')} ${item.value ? `• ${item.value} pts` : ''}</div>
+                                <div class="small muted">Models: ${esc(models)}</div>
+                            </td>
+                            <td>
+                                <div>Winner: ${winner}</div>
+                                <div class="small muted">Cancelled: ${item.status.cancelled ? 'yes' : 'no'}</div>
+                            </td>
+                            <td>
+                                <div class="row">
+                                    <button class="danger" onclick="stopChallenge('${esc(item.challenge)}')">Stop</button>
+                                    <button class="secondary" onclick="setTraceTarget('${esc(item.challenge)}')">Trace</button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+
+            const stoppedRows = document.getElementById('stoppedRows');
+            if (!state.stopped.length) {
+                stoppedRows.innerHTML = '<tr><td colspan="3" class="muted">No stopped swarms.</td></tr>';
+            } else {
+                stoppedRows.innerHTML = state.stopped.map(item => {
+                    const models = item.models.length ? item.models.join(', ') : '—';
+                    return `
+                        <tr>
+                            <td>
+                                <div class="challenge-name">${esc(item.challenge)}</div>
+                                <div class="small muted">${esc(item.category || '')} ${item.value ? `• ${item.value} pts` : ''}</div>
+                                <div class="small muted">Models: ${esc(models)}</div>
+                            </td>
+                            <td>
+                                <div class="muted">Paused / cancelled</div>
+                            </td>
+                            <td>
+                                <div class="row">
+                                    <button class="secondary" disabled>Stopped</button>
+                                    <button class="secondary" onclick="setTraceTarget('${esc(item.challenge)}')">Trace</button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+
+            const known = document.getElementById('knownList');
+            known.innerHTML = state.known.map(item => {
+                const solved = item.solved ? '<span class="flag">solved</span>' : '<span class="muted">unsolved</span>';
+                return `<div class="row" style="justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #24304f;">
+                    <div><strong>${esc(item.challenge)}</strong> <span class="muted small">(${esc(item.category || 'unknown')}${item.value ? `, ${item.value} pts` : ''})</span>${item.paused ? ' <span class="muted small">• paused</span>' : ''}</div>
+                    <div>${solved}</div>
+                </div>`;
+            }).join('') || '<div class="muted">No challenge metadata loaded yet.</div>';
+
+            const results = document.getElementById('results');
+            const resultEntries = Object.entries(state.results || {});
+            results.innerHTML = resultEntries.length ? resultEntries.map(([name, info]) => {
+                const flag = info && info.flag ? `<span class="flag">${esc(info.flag)}</span>` : '—';
+                const submit = info && info.submit ? esc(info.submit) : '—';
+                return `<div style="padding: 10px; background: #0c1326; border: 1px solid #2a3960; border-radius: 12px;">
+                    <div><strong>${esc(name)}</strong></div>
+                    <div class="small">Flag: ${flag}</div>
+                    <div class="small muted">${submit}</div>
+                </div>`;
+            }).join('') : '<div class="muted">No solved flags yet.</div>';
+
+            const traceChallenge = document.getElementById('traceChallenge');
+            const currentChallenge = traceChallenge.value || (state.active[0] && state.active[0].challenge) || '';
+            traceChallenge.innerHTML = ['<option value="">Select a challenge</option>']
+                .concat(state.active.map(item => `<option value="${esc(item.challenge)}">${esc(item.challenge)}</option>`))
+                .join('');
+            if (currentChallenge) traceChallenge.value = currentChallenge;
+
+            const modelSet = new Set();
+            state.active.forEach(item => (item.models || []).forEach(m => modelSet.add(m)));
+            const traceModel = document.getElementById('traceModel');
+            const currentModel = traceModel.value || Array.from(modelSet)[0] || '';
+            traceModel.innerHTML = Array.from(modelSet).length ? Array.from(modelSet).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('') : '<option value="">No models</option>';
+            if (currentModel) traceModel.value = currentModel;
+        }
+
+        function setTraceTarget(challenge) {
+            const sel = document.getElementById('traceChallenge');
+            sel.value = challenge;
+            loadTrace();
+        }
+
+        async function stopChallenge(challenge) {
+            await fetch('/api/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({challenge})
+            });
+            await refreshState();
+        }
+
+        async function loadTrace() {
+            const challenge = document.getElementById('traceChallenge').value;
+            const model = document.getElementById('traceModel').value;
+            const last_n = document.getElementById('traceCount').value || 30;
+            if (!challenge || !model) {
+                document.getElementById('traceBox').textContent = 'Select a challenge and model to view trace output.';
+                return;
+            }
+            const resp = await fetch(`/api/trace?challenge=${encodeURIComponent(challenge)}&model=${encodeURIComponent(model)}&last_n=${encodeURIComponent(last_n)}`);
+            const data = await resp.json();
+            document.getElementById('traceBox').textContent = data.trace || data.error || 'No trace data.';
+        }
+
+        async function sendMessage() {
+            const message = document.getElementById('messageBox').value;
+            const resp = await fetch('/api/message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message})
+            });
+            const data = await resp.json();
+            document.getElementById('messageStatus').textContent = data.ok ? 'Queued.' : (data.error || 'Failed');
+            document.getElementById('messageBox').value = '';
+        }
+
+        refreshState();
+        setInterval(refreshState, 5000);
+    </script>
+</body>
+</html>

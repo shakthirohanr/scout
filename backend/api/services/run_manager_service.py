@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
 import json
 import logging
 import os
@@ -16,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+ 
+__all__ = ["ManagedRun", "RunManager"]
 
 from backend.api.database import session_scope
 from backend.api.repositories.ctf_repository import (
@@ -35,8 +38,9 @@ from backend.api.repositories.run_repository import (
     list_runs as list_persisted_runs,
 )
 from backend.api.services.mappers import solver_run_to_dict
+from backend.api.utils import utcnow
 from backend.config import Settings
-from backend.log_reader import list_trace_summaries, logs_directory
+from backend.log_reader import TraceSummary, list_trace_summaries, logs_directory
 from backend.run_config import SolverRunConfig, build_cli_command, resolve_workdir
 from backend.sandbox import cleanup_challenge_containers
 
@@ -50,8 +54,6 @@ TERMINAL_TRACE_STATUS_TO_RUN_STATUS = {
 }
 
 
-def utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 def as_iso(value: datetime | None) -> str | None:
@@ -105,7 +107,7 @@ def _terminate_pid(pid: int | None) -> None:
             time.sleep(0.1)
 
 
-def _sort_trace_summaries_by_recency(summaries: list[Any]) -> list[Any]:
+def _sort_trace_summaries_by_recency(summaries: list[TraceSummary]) -> list[TraceSummary]:
     return sorted(
         summaries,
         key=lambda summary: _timestamp_or_zero(summary.updated_at),
@@ -191,10 +193,8 @@ class ManagedRun:
             if self.status not in {"cancelled", "failed", "finished", "solved", "gave_up"}:
                 self.status = "finished" if return_code == 0 else "failed"
             if self._output_handle is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._output_handle.close()
-                except Exception:
-                    pass
                 self._output_handle = None
             return
 
@@ -494,14 +494,18 @@ class RunManager:
             process_env["CTF_AGENT_CHALLENGE_ID"] = challenge_id
 
         output_handle = open(output_log_path, "a", encoding="utf-8")
-        process = subprocess.Popen(
-            command,
-            cwd=workdir,
-            stdout=output_handle,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=process_env,
-        )
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=workdir,
+                stdout=output_handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=process_env,
+            )
+        except Exception:
+            output_handle.close()
+            raise
 
         run = ManagedRun(
             run_id=run_id,
@@ -651,6 +655,13 @@ class RunManager:
 
     def delete_challenge_data(self, challenge_id: str) -> dict[str, Any]:
         self.sync_runs()
+
+        # Evict matching in-memory runs so later syncs cannot recreate deleted DB rows.
+        with self._lock:
+            for run_id, run in list(self._runs.items()):
+                if run.challenge_id == challenge_id:
+                    self._runs.pop(run_id, None)
+
         with session_scope() as session:
             challenge = get_challenge_by_id(session, challenge_id)
             if challenge is None:
@@ -744,7 +755,5 @@ class RunManager:
         with self._lock:
             run_ids = list(self._runs.keys())
         for run_id in run_ids:
-            try:
+            with contextlib.suppress(Exception):
                 self.cancel(run_id)
-            except Exception:
-                pass

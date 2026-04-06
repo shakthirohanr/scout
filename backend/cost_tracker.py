@@ -9,6 +9,8 @@ from typing import Any
 from genai_prices import calc_price
 from pydantic_ai.usage import RunUsage
 
+__all__ = ["CostTracker", "calculate_usage_cost"]
+
 logger = logging.getLogger(__name__)
 
 # Provider ID mapping for genai-prices
@@ -93,7 +95,7 @@ def calc_cost(usage: RunUsage, model_name: str, provider_spec: str = "") -> floa
     if fallback is not None:
         return fallback
 
-    logger.warning(f"Could not calculate cost for {model_name}")
+    logger.warning("Could not calculate cost for %s", model_name)
     return 0.0
 
 

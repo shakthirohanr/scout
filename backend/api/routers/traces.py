@@ -7,14 +7,13 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from backend.api.utils import utcnow_iso
 from backend.log_reader import get_trace_detail, list_trace_summaries, logs_directory
 
 
 router = APIRouter(prefix="/api/v1", tags=["traces"])
 
 
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 @router.get("/traces")
@@ -23,7 +22,7 @@ def traces() -> dict[str, Any]:
     return {
         "traces": summaries,
         "available": logs_directory().is_dir(),
-        "generated_at": _utcnow_iso(),
+        "generated_at": utcnow_iso(),
         "logs_directory": str(logs_directory()),
     }
 

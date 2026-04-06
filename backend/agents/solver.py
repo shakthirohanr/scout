@@ -14,6 +14,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 
+from backend.config import Settings
 from backend.cost_tracker import CostTracker
 from backend.ctfd import CTFdClient
 from backend.deps import SolverDeps
@@ -65,14 +66,14 @@ class TracingToolset(WrapperToolset[SolverDeps]):
         args_str = str(tool_args)
         if len(args_str) > 100:
             args_str = args_str[:100] + "..."
-        logger.info(f"[{self.agent_name}] Tool call: {name}({args_str})")
+        logger.info("[%s] Tool call: %s(%s)", self.agent_name, name, args_str)
 
         self.tracer.tool_call(name, tool_args, step)
 
         # Loop detection
         loop_status = self.loop_detector.check(name, tool_args)
         if loop_status == "break":
-            logger.warning(f"Loop break on {name} at step {step}")
+            logger.warning("Loop break on %s at step %s", name, step)
             self.tracer.event("loop_break", tool=name, step=step)
             # Inject loop warning by returning it as the tool result
             return LOOP_WARNING_MESSAGE
@@ -84,7 +85,7 @@ class TracingToolset(WrapperToolset[SolverDeps]):
         result_log = result_str.replace('\n', ' ')
         if len(result_log) > 100:
             result_log = result_log[:100] + "..."
-        logger.info(f"[{self.agent_name}] Tool result: {result_log}")
+        logger.info("[%s] Tool result: %s", self.agent_name, result_log)
 
         self.tracer.tool_result(name, result_str, step)
 
@@ -127,7 +128,7 @@ class Solver:
         meta: ChallengeMeta,
         ctfd: CTFdClient,
         cost_tracker: CostTracker,
-        settings: object,
+        settings: Settings,
         cancel_event: asyncio.Event | None = None,
         sandbox: DockerSandbox | None = None,
         owns_sandbox: bool | None = None,
@@ -205,7 +206,7 @@ class Solver:
         )
 
         self.tracer.event("start", challenge=self.meta.name, model=self.model_id)
-        logger.info(f"[{self.agent_name}] Solver started")
+        logger.info("[%s] Solver started", self.agent_name)
 
     async def run_until_done_or_gave_up(self) -> SolverResult:
         """Run the solver loop until flag found, gave up, or cancelled."""
@@ -218,7 +219,7 @@ class Solver:
 
         try:
             from pydantic_ai.usage import UsageLimits
-            logger.info(f"[{self.agent_name}] Agent requesting model...")
+            logger.info("[%s] Agent requesting model...", self.agent_name)
             result = await self._agent.run(
                 "Solve this CTF challenge." if not self._messages else "Continue solving.",
                 deps=self.deps,
@@ -254,7 +255,7 @@ class Solver:
                     log_text = text.replace('\n', ' ')
                     if len(log_text) > 200:
                         log_text = log_text[:200] + "..."
-                    logger.info(f"[{self.agent_name}] Analysis: {log_text}")
+                    logger.info("[%s] Analysis: %s", self.agent_name, log_text)
 
                     msg_usage = msg.usage
                     self.tracer.model_response(
@@ -282,7 +283,7 @@ class Solver:
         except asyncio.CancelledError:
             return self._result(CANCELLED)
         except Exception as e:
-            logger.error(f"[{self.agent_name}] Error: {e}", exc_info=True)
+            logger.error("[%s] Error: %s", self.agent_name, e, exc_info=True)
             self._findings = f"Error: {e}"
             self.tracer.event("error", error=str(e))
             return self._result(ERROR)
@@ -305,7 +306,7 @@ class Solver:
         self._messages.append(bump_msg)
         self.loop_detector.reset()
         self.tracer.event("bump", insights=insights[:500])
-        logger.info(f"[{self.agent_name}] Bumped with sibling insights")
+        logger.info("[%s] Bumped with sibling insights", self.agent_name)
 
     def _result(self, status: str, run_steps: int | None = None, run_cost: float | None = None) -> SolverResult:
         agent_usage = self.cost_tracker.by_agent.get(self.agent_name)

@@ -115,7 +115,7 @@ export type CTFSourceSummary = {
 export type ImportCTFInput = {
   name: string;
   ctfdUrl: string;
-  authMode: "token" | "credentials";
+  authMode: "token" | "credentials" | "none";
   token?: string;
   username?: string;
   password?: string;

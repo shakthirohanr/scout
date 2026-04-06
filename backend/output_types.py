@@ -1,6 +1,8 @@
 """Structured output types for solver agents."""
 
 from pydantic import BaseModel
+ 
+__all__ = ["FlagFound", "solver_output_json_schema"]
 
 
 class FlagFound(BaseModel):

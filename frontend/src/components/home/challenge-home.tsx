@@ -27,7 +27,7 @@ type ChallengeHomeProps = {
   challenges: ChallengeCatalogItem[];
 };
 
-type AuthMode = "token" | "credentials";
+type AuthMode = "token" | "credentials" | "none";
 
 function formatStartedAt(value: string | null): string {
   if (!value) {
@@ -322,6 +322,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                     fallbackAxisSide: "none",
                   }}
                 >
+                  <SelectItem value="none">No Auth (Public CTF)</SelectItem>
                   <SelectItem value="token">Token</SelectItem>
                   <SelectItem value="credentials">Username / Password</SelectItem>
                 </SelectContent>
@@ -359,7 +360,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   </Button>
                 </div>
               </>
-            ) : (
+            ) : authMode === "credentials" ? (
               <>
                 <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
                   <div className="space-y-2">
@@ -408,6 +409,25 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   </Button>
                 </div>
               </>
+            ) : (
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
+                <p className="text-sm text-muted-foreground">
+                  Public CTF selected. No token or credentials are required.
+                </p>
+
+                <Button
+                  type="submit"
+                  disabled={isImporting}
+                  className="mt-4 h-10 w-full gap-2 xl:mt-0"
+                >
+                  {isImporting ? (
+                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Upload className="size-4" aria-hidden="true" />
+                  )}
+                  Import CTF
+                </Button>
+              </div>
             )}
           </form>
 

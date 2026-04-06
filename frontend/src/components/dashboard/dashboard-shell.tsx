@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { LogTerminal } from "@/components/dashboard/log-terminal";
@@ -107,6 +107,15 @@ export function DashboardShell({
     ((activeChallenge?.state === "starting" || activeChallenge?.state === "running") &&
       !hasTerminalTrace);
 
+  useEffect(() => {
+    const challengeTitle = activeChallenge?.name ?? activeChallengeName;
+    if (!challengeTitle) {
+      document.title = "CryptoAgent";
+      return;
+    }
+    document.title = challengeTitle;
+  }, [activeChallenge?.name, activeChallengeName]);
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-background px-4 py-6 sm:px-6 lg:px-8 **:rounded-none">
       <main className="flex-1 min-h-0 pr-1">
@@ -211,13 +220,13 @@ export function DashboardShell({
             </div>
           </div>
 
-          <div className="xl:order-first h-full flex flex-col min-h-0">
+          <div className="xl:order-first flex flex-col min-h-0">
             {filteredTraces.length ? (
               <LogTerminal
                 summary={selectedTrace}
                 content={detail?.terminalOutput ?? ""}
                 onRefresh={refreshNow}
-                className="h-full"
+                className="h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)]"
               />
             ) : (
               <Card className="rounded-none border-dashed border-border/70 bg-card shadow-none">

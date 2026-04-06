@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
 import os
 import time
 from pathlib import Path
+
+__all__ = ["SolverTracer"]
 
 
 def _sanitize(s: str) -> str:
@@ -17,28 +20,30 @@ class SolverTracer:
     """Append-only JSONL event tracer. Flushes every write for tail -f streaming."""
 
     def __init__(self, challenge_name: str, model_id: str, log_dir: str = "logs") -> None:
-        Path(log_dir).mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d-%H%M%S")
         self.path = str(Path(log_dir) / f"trace-{_sanitize(challenge_name)}-{_sanitize(model_id)}-{ts}.jsonl")
-        self._fh = open(self.path, "a")
+        try:
+            Path(log_dir).mkdir(parents=True, exist_ok=True)
+            self._fh = open(self.path, "a")
+        except Exception:
+            # Degrade gracefully — tracer becomes a no-op if file can't be opened
+            self._fh = None
         atexit.register(self._close)
 
     def close(self) -> None:
         """Explicitly close the trace file. Safe to call multiple times."""
-        if not self._fh.closed:
-            try:
+        if self._fh is not None and not self._fh.closed:
+            with contextlib.suppress(Exception):
                 self._fh.close()
-            except Exception:
-                pass
 
     _close = close  # atexit compat
 
     def _write(self, event: dict) -> None:
-        try:
+        if self._fh is None:
+            return
+        with contextlib.suppress(Exception):
             self._fh.write(json.dumps({"ts": time.time(), **event}) + "\n")
             self._fh.flush()
-        except Exception:
-            pass
 
     def tool_call(self, tool_name: str, args: dict | str, step: int) -> None:
         args_str = args if isinstance(args, str) else json.dumps(args)

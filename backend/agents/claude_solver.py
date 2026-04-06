@@ -9,6 +9,7 @@ Flag submission is intercepted from bash commands matching `submit_flag <flag>`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import shlex
@@ -23,6 +24,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from backend.config import Settings
 from backend.cost_tracker import CostTracker
 from backend.ctfd import CTFdClient
 from backend.loop_detect import LoopDetector
@@ -46,7 +48,7 @@ class ClaudeSolver:
         meta: ChallengeMeta,
         ctfd: CTFdClient,
         cost_tracker: CostTracker,
-        settings: object,
+        settings: Settings,
         cancel_event: asyncio.Event | None = None,
         no_submit: bool = False,
         submit_fn=None,
@@ -113,7 +115,7 @@ class ClaudeSolver:
             try:
                 return await _sandbox_redirect_inner(input_data, tool_use_id, context)
             except Exception as e:
-                logger.warning(f"[{self.agent_name}] PreToolUse hook error: {e}")
+                logger.warning("[%s] PreToolUse hook error: %s", self.agent_name, e)
                 return {}
 
         async def _sandbox_redirect_inner(input_data, tool_use_id, context):
@@ -229,7 +231,7 @@ class ClaudeSolver:
             try:
                 return await _trace_post_tool_inner(input_data, tool_use_id, context)
             except Exception as e:
-                logger.warning(f"[{self.agent_name}] PostToolUse hook error: {e}")
+                logger.warning("[%s] PostToolUse hook error: %s", self.agent_name, e)
                 return {}
 
         async def _trace_post_tool_inner(input_data, tool_use_id, context):
@@ -275,7 +277,7 @@ class ClaudeSolver:
         self._client = ClaudeSDKClient(options=options)
         await self._client.__aenter__()
         self.tracer.event("start", challenge=self.meta.name, model=self.model_id)
-        logger.info(f"[{self.agent_name}] Claude SDK solver started")
+        logger.info("[%s] Claude SDK solver started", self.agent_name)
 
     async def run_until_done_or_gave_up(self) -> SolverResult:
         if not self._client:
@@ -358,7 +360,7 @@ class ClaudeSolver:
             return self._result(CANCELLED)
         except Exception as e:
             error_str = str(e)
-            logger.error(f"[{self.agent_name}] Error: {e}", exc_info=True)
+            logger.error("[%s] Error: %s", self.agent_name, e, exc_info=True)
             self._findings = f"Error: {e}"
             self.tracer.event("error", error=error_str)
             if "quota" in error_str.lower() or "rate" in error_str.lower() or "overloaded" in error_str.lower():
@@ -369,7 +371,7 @@ class ClaudeSolver:
         self._bump_insights = insights
         self.loop_detector.reset()
         self.tracer.event("bump", insights=insights[:500])
-        logger.info(f"[{self.agent_name}] Bumped with insights (session {self._session_id})")
+        logger.info("[%s] Bumped with insights (session %s)", self.agent_name, self._session_id)
 
     def _result(self, status: str, run_steps: int | None = None, run_cost: float | None = None) -> SolverResult:
         self.tracer.event("finish", status=status, flag=self._flag, confirmed=self._confirmed, cost_usd=round(self._cost_usd, 4))
@@ -386,10 +388,8 @@ class ClaudeSolver:
         self.tracer.event("stop", step_count=self._step_count)
         self.tracer.close()
         if self._client:
-            try:
+            with contextlib.suppress(Exception):
                 await self._client.__aexit__(None, None, None)
-            except Exception:
-                pass
             self._client = None
         if self.sandbox:
             await self.sandbox.stop()

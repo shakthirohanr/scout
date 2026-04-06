@@ -79,7 +79,7 @@ class ChallengeCatalogItem(BaseModel):
 class CTFImportRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     ctfd_url: str = Field(min_length=3, max_length=1024)
-    auth_mode: Literal["token", "credentials"] = "token"
+    auth_mode: Literal["token", "credentials", "none"] = "token"
     token: str = ""
     username: str = ""
     password: str = ""
@@ -87,6 +87,8 @@ class CTFImportRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth(self) -> CTFImportRequest:
+        if self.auth_mode == "none":
+            return self
         if self.auth_mode == "token" and not self.token.strip():
             raise ValueError("token is required when auth_mode=token")
         if self.auth_mode == "credentials" and (

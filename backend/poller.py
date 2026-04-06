@@ -4,6 +4,8 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
+__all__ = ["PollEvent", "CTFdPoller"]
+
 from backend.ctfd import CTFdClient
 
 logger = logging.getLogger(__name__)
@@ -90,7 +92,7 @@ class CTFdPoller:
 
             # Sanity check: if results look bogus compared to what we know, skip.
             if self._known_challenges and len(current_names) < len(self._known_challenges) // 2:
-                logger.warning(f"Poll returned suspicious data ({len(current_names)} challenges vs {len(self._known_challenges)} known) — skipping")
+                logger.warning("Poll returned suspicious data (%d challenges vs %d known) — skipping", len(current_names), len(self._known_challenges))
                 return
             # Don't let solved count regress (API might return empty on errors)
             if self._known_solved and not current_solved:
@@ -117,7 +119,7 @@ class CTFdPoller:
             self._known_solved = current_solved
 
         except Exception as e:
-            logger.warning(f"Poll error: {e}")
+            logger.warning("Poll error: %s", e)
 
     async def _loop(self) -> None:
         while not self._stop.is_set():

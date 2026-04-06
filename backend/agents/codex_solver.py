@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import itertools
 import json
 import logging
 import time
 from typing import Any
 
+from backend.config import Settings
 from backend.cost_tracker import CostTracker
 from backend.ctfd import CTFdClient
 from backend.loop_detect import LoopDetector
@@ -126,7 +128,7 @@ class CodexSolver:
         meta: ChallengeMeta,
         ctfd: CTFdClient,
         cost_tracker: CostTracker,
-        settings: object,
+        settings: Settings,
         cancel_event: asyncio.Event | None = None,
         no_submit: bool = False,
         submit_fn=None,
@@ -227,7 +229,7 @@ class CodexSolver:
         self._thread_id = resp.get("result", {}).get("thread", {}).get("id", "")
 
         self.tracer.event("start", challenge=self.meta.name, model=self.model_id)
-        logger.info(f"[{self.agent_name}] Codex solver started (thread={self._thread_id})")
+        logger.info("[%s] Codex solver started (thread=%s)", self.agent_name, self._thread_id)
 
     async def _rpc(self, method: str, params: dict | None = None) -> dict:
         assert self._proc and self._proc.stdin
@@ -281,7 +283,7 @@ class CodexSolver:
                 if future and not future.done():
                     if "error" in msg:
                         err = msg["error"]
-                        logger.error(f"[{self.agent_name}] RPC error: {err}")
+                        logger.error("[%s] RPC error: %s", self.agent_name, err)
                         future.set_exception(RuntimeError(f"Codex RPC error: {err}"))
                     else:
                         future.set_result(msg)
@@ -329,7 +331,7 @@ class CodexSolver:
                     else:
                         error_msg = str(error)
                     self._turn_error = error_msg
-                    logger.error(f"[{self.agent_name}] Turn failed: {error_msg}")
+                    logger.error("[%s] Turn failed: %s", self.agent_name, error_msg)
                     self.tracer.event("turn_failed", error=error_msg, step=self._step_count)
                     self._findings = f"Turn failed: {error_msg}"
                     self._structured_output = None
@@ -350,12 +352,12 @@ class CodexSolver:
                 if context_window and context_window < 200_000 and total_tokens > context_window * 0.7:
                     if not self._compact_requested:
                         self._compact_requested = True
-                        logger.info(f"[{self.agent_name}] Requesting compaction ({total_tokens}/{context_window} tokens)")
+                        logger.info("[%s] Requesting compaction (%s/%s tokens)", self.agent_name, total_tokens, context_window)
                         try:
                             await self._rpc("thread/compact/start", {"threadId": self._thread_id})
                             self.tracer.event("compact_requested", tokens=total_tokens, window=context_window)
                         except Exception as e:
-                            logger.warning(f"[{self.agent_name}] Compaction request failed: {e}")
+                            logger.warning("[%s] Compaction request failed: %s", self.agent_name, e)
 
                 self.cost_tracker.record_tokens(
                     self.agent_name, self.model_id,
@@ -513,7 +515,7 @@ class CodexSolver:
             return self._result(CANCELLED)
         except Exception as e:
             error_str = str(e)
-            logger.error(f"[{self.agent_name}] Error: {e}", exc_info=True)
+            logger.error("[%s] Error: %s", self.agent_name, e, exc_info=True)
             self._findings = f"Error: {e}"
             self.tracer.event("error", error=error_str)
             if "quota" in error_str.lower() or "rate" in error_str.lower():
@@ -539,19 +541,15 @@ class CodexSolver:
         self.tracer.close()
         if self._reader_task:
             self._reader_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._reader_task
-            except (asyncio.CancelledError, Exception):
-                pass
         if self._proc:
             try:
                 self._proc.terminate()
                 await asyncio.wait_for(self._proc.wait(), timeout=5)
             except Exception:
-                try:
+                with contextlib.suppress(Exception):
                     self._proc.kill()
-                except Exception:
-                    pass
             self._proc = None
         if self.sandbox:
             await self.sandbox.stop()

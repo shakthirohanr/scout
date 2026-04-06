@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import Callable, Coroutine
@@ -111,7 +112,7 @@ async def run_event_loop(
         # Auto-spawn swarms for unsolved challenges if coordinator LLM didn't
         await _auto_spawn_unsolved(deps, poller)
 
-        last_status = asyncio.get_event_loop().time()
+        last_status = asyncio.get_running_loop().time()
 
         while True:
             events = []
@@ -161,7 +162,7 @@ async def run_event_loop(
                     break
 
             # Periodic status update — only when there are active swarms or other events
-            now = asyncio.get_event_loop().time()
+            now = asyncio.get_running_loop().time()
             if now - last_status >= status_interval:
                 last_status = now
                 active = [n for n, t in deps.swarm_tasks.items() if not t.done()]
@@ -175,7 +176,7 @@ async def run_event_loop(
                 if active or parts:
                     parts.append(status_line)
                 else:
-                    logger.info(f"Event -> coordinator: {status_line}")
+                    logger.info("Event -> coordinator: %s", status_line)
 
             if parts:
                 msg = "\n\n".join(parts)
@@ -187,9 +188,7 @@ async def run_event_loop(
     except Exception as e:
         logger.error("Coordinator fatal: %s", e, exc_info=True)
     finally:
-        if msg_server:
-            msg_server.close()
-            await msg_server.wait_closed()
+        await server.stop()
         await poller.stop()
         for swarm in deps.swarms.values():
             swarm.kill()
@@ -198,10 +197,8 @@ async def run_event_loop(
         if deps.swarm_tasks:
             await asyncio.gather(*deps.swarm_tasks.values(), return_exceptions=True)
         cost_tracker.log_summary()
-        try:
+        with contextlib.suppress(Exception):
             await ctfd.close()
-        except Exception:
-            pass
 
     return {
         "results": deps.results,
@@ -222,9 +219,9 @@ async def _auto_spawn_one(deps: CoordinatorDeps, challenge_name: str) -> None:
     try:
         from backend.agents.coordinator_core import do_spawn_swarm
         result = await do_spawn_swarm(deps, challenge_name)
-        logger.info(f"Auto-spawn {challenge_name}: {result[:100]}")
+        logger.info("Auto-spawn %s: %s", challenge_name, result[:100])
     except Exception as e:
-        logger.warning(f"Auto-spawn failed for {challenge_name}: {e}")
+        logger.warning("Auto-spawn failed for %s: %s", challenge_name, e)
 
 
 async def _auto_spawn_unsolved(deps: CoordinatorDeps, poller) -> None:
@@ -262,7 +259,7 @@ def _dashboard_state(deps: CoordinatorDeps) -> dict[str, Any]:
             "challenge": name,
             "category": getattr(meta, "category", ""),
             "value": getattr(meta, "value", 0),
-            "solved": name in deps.results or name in deps.swarms and bool(deps.swarms[name].winner),
+            "solved": (name in deps.results) or (name in deps.swarms and bool(deps.swarms[name].winner)),
             "paused": name in deps.paused_challenges,
         })
 
@@ -278,368 +275,157 @@ def _dashboard_state(deps: CoordinatorDeps) -> dict[str, Any]:
     }
 
 
-def _dashboard_html() -> str:
-        return """<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CTF Agent Dashboard</title>
-    <style>
-        :root { color-scheme: dark; }
-        body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1020; color: #e7ecff; }
-        header { padding: 20px 24px; border-bottom: 1px solid #24304f; background: linear-gradient(180deg, #101a33, #0b1020); }
-        h1 { margin: 0 0 8px; font-size: 22px; }
-        .sub { color: #9db0df; font-size: 13px; }
-        main { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; padding: 16px; }
-        .card { background: #111a30; border: 1px solid #24304f; border-radius: 14px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-        .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-        .pill { padding: 6px 10px; border-radius: 999px; background: #172342; border: 1px solid #2d3a5f; color: #d6defd; font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #24304f; font-size: 13px; vertical-align: top; }
-        th { color: #97aae0; font-weight: 600; }
-        button { background: #2d66ff; color: white; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
-        button.secondary { background: #22304f; }
-        button.danger { background: #ba3f3f; }
-        button:disabled { opacity: .5; cursor: not-allowed; }
-        select, textarea, input { width: 100%; box-sizing: border-box; background: #0c1326; color: #e7ecff; border: 1px solid #2a3960; border-radius: 10px; padding: 8px; }
-        textarea { min-height: 84px; resize: vertical; }
-        pre { white-space: pre-wrap; word-break: break-word; background: #0c1326; border: 1px solid #2a3960; border-radius: 12px; padding: 12px; min-height: 220px; max-height: 500px; overflow: auto; }
-        .grid { display: grid; gap: 12px; }
-        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .muted { color: #9db0df; }
-        .flag { color: #72f1b8; font-weight: 700; }
-        .small { font-size: 12px; }
-        .challenge-name { font-weight: 700; }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>CTF Agent Dashboard</h1>
-        <div class="sub">Stop specific challenges, inspect traces, and watch solved flags appear here.</div>
-        <div id="stats" class="stats"></div>
-    </header>
+class DashboardServer:
+    """Encapsulates the coordinator dashboard HTTP server logic."""
 
-    <main>
-        <section class="card">
-            <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
-                <strong>Active swarms</strong>
-                <div class="row">
-                    <button class="secondary" onclick="refreshState()">Refresh</button>
-                    <button class="secondary" onclick="loadTrace()">Load trace</button>
-                </div>
-            </div>
-            <table>
-                <thead>
-                    <tr><th>Challenge</th><th>Status</th><th>Actions</th></tr>
-                </thead>
-                <tbody id="activeRows"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
-            </table>
-            <div style="margin-top: 14px;">
-                <strong>Stopped / paused</strong>
-                <table style="margin-top: 10px;">
-                    <thead>
-                        <tr><th>Challenge</th><th>Status</th><th>Actions</th></tr>
-                    </thead>
-                    <tbody id="stoppedRows"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
-                </table>
-            </div>
-            <div style="margin-top: 14px;">
-                <div class="row">
-                    <div style="flex: 1; min-width: 220px;">
-                        <label class="small muted">Trace challenge</label>
-                        <select id="traceChallenge" onchange="loadTrace()"></select>
-                    </div>
-                    <div style="width: 180px;">
-                        <label class="small muted">Model</label>
-                        <select id="traceModel" onchange="loadTrace()"></select>
-                    </div>
-                    <div style="width: 90px;">
-                        <label class="small muted">Last N</label>
-                        <input id="traceCount" type="number" min="1" max="200" value="30" onchange="loadTrace()" />
-                    </div>
-                </div>
-            </div>
-            <pre id="traceBox">Select a challenge to view its latest trace.</pre>
-        </section>
+    def __init__(self, deps: CoordinatorDeps):
+        self.deps = deps
+        self._server: asyncio.Server | None = None
+        self._template_path = Path(__file__).parent.parent / "templates" / "dashboard.html"
 
-        <section class="grid">
-            <div class="card">
-                <strong>Results / flags</strong>
-                <div id="results" class="grid" style="margin-top: 10px;"></div>
-            </div>
-            <div class="card">
-                <strong>Send operator message</strong>
-                <p class="muted small">Message goes directly to the coordinator inbox.</p>
-                <textarea id="messageBox" placeholder="Tell the coordinator what to do next…"></textarea>
-                <div class="row" style="margin-top: 10px;">
-                    <button onclick="sendMessage()">Send</button>
-                    <span id="messageStatus" class="muted small"></span>
-                </div>
-            </div>
-            <div class="card">
-                <strong>All known challenges</strong>
-                <div id="knownList" class="grid" style="margin-top: 10px;"></div>
-            </div>
-        </section>
-    </main>
+    async def start(self, port: int) -> None:
+        """Start the dashboard server on 127.0.0.1:port."""
+        try:
+            self._server = await asyncio.start_server(self._handle_client, "127.0.0.1", port)
+            actual_port = self._server.sockets[0].getsockname()[1]
+            logger.warning("Dashboard listening on http://127.0.0.1:%s", actual_port)
+        except OSError as e:
+            logger.warning("Could not start dashboard: %s", e)
 
-    <script>
-        let lastState = null;
+    async def stop(self) -> None:
+        """Stop the dashboard server."""
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+            self._server = None
 
-        function esc(s) {
-            return String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-        }
+    async def _send(self, writer: asyncio.StreamWriter, status: str, content_type: str, body: str) -> None:
+        payload = body.encode("utf-8")
+        headers = [
+            f"HTTP/1.1 {status}",
+            f"Content-Type: {content_type}",
+            f"Content-Length: {len(payload)}",
+            "Cache-Control: no-store",
+            "Connection: close",
+            "\r\n",
+        ]
+        writer.write("\r\n".join(headers).encode("ascii") + payload)
 
-        async function refreshState() {
-            const resp = await fetch('/api/state');
-            const state = await resp.json();
-            lastState = state;
-
-            const stats = document.getElementById('stats');
-            stats.innerHTML = `
-                <span class="pill">Active: ${state.active_count}</span>
-                <span class="pill">Stopped: ${state.stopped_count || 0}</span>
-                <span class="pill">Solved: ${state.solved_count}</span>
-                <span class="pill">Capacity: ${state.max_concurrent_challenges}</span>
-            `;
-
-            const activeRows = document.getElementById('activeRows');
-            if (!state.active.length) {
-                activeRows.innerHTML = '<tr><td colspan="3" class="muted">No active swarms.</td></tr>';
-            } else {
-                activeRows.innerHTML = state.active.map(item => {
-                    const winner = item.status && item.status.winner ? `<span class="flag">${esc(item.status.winner)}</span>` : '—';
-                    const models = item.models.length ? item.models.join(', ') : '—';
-                    return `
-                        <tr>
-                            <td>
-                                <div class="challenge-name">${esc(item.challenge)}</div>
-                                <div class="small muted">${esc(item.category || '')} ${item.value ? `• ${item.value} pts` : ''}</div>
-                                <div class="small muted">Models: ${esc(models)}</div>
-                            </td>
-                            <td>
-                                <div>Winner: ${winner}</div>
-                                <div class="small muted">Cancelled: ${item.status.cancelled ? 'yes' : 'no'}</div>
-                            </td>
-                            <td>
-                                <div class="row">
-                                    <button class="danger" onclick="stopChallenge(${JSON.stringify(item.challenge)})">Stop</button>
-                                    <button class="secondary" onclick="setTraceTarget(${JSON.stringify(item.challenge)})">Trace</button>
-                                </div>
-                            </td>
-                        </tr>`;
-                }).join('');
-            }
-
-            const stoppedRows = document.getElementById('stoppedRows');
-            if (!state.stopped.length) {
-                stoppedRows.innerHTML = '<tr><td colspan="3" class="muted">No stopped swarms.</td></tr>';
-            } else {
-                stoppedRows.innerHTML = state.stopped.map(item => {
-                    const models = item.models.length ? item.models.join(', ') : '—';
-                    return `
-                        <tr>
-                            <td>
-                                <div class="challenge-name">${esc(item.challenge)}</div>
-                                <div class="small muted">${esc(item.category || '')} ${item.value ? `• ${item.value} pts` : ''}</div>
-                                <div class="small muted">Models: ${esc(models)}</div>
-                            </td>
-                            <td>
-                                <div class="muted">Paused / cancelled</div>
-                            </td>
-                            <td>
-                                <div class="row">
-                                    <button class="secondary" disabled>Stopped</button>
-                                    <button class="secondary" onclick="setTraceTarget(${JSON.stringify(item.challenge)})">Trace</button>
-                                </div>
-                            </td>
-                        </tr>`;
-                }).join('');
-            }
-
-            const known = document.getElementById('knownList');
-            known.innerHTML = state.known.map(item => {
-                const solved = item.solved ? '<span class="flag">solved</span>' : '<span class="muted">unsolved</span>';
-                return `<div class="row" style="justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #24304f;">
-                    <div><strong>${esc(item.challenge)}</strong> <span class="muted small">(${esc(item.category || 'unknown')}${item.value ? `, ${item.value} pts` : ''})</span>${item.paused ? ' <span class="muted small">• paused</span>' : ''}</div>
-                    <div>${solved}</div>
-                </div>`;
-            }).join('') || '<div class="muted">No challenge metadata loaded yet.</div>';
-
-            const results = document.getElementById('results');
-            const resultEntries = Object.entries(state.results || {});
-            results.innerHTML = resultEntries.length ? resultEntries.map(([name, info]) => {
-                const flag = info && info.flag ? `<span class="flag">${esc(info.flag)}</span>` : '—';
-                const submit = info && info.submit ? esc(info.submit) : '—';
-                return `<div style="padding: 10px; background: #0c1326; border: 1px solid #2a3960; border-radius: 12px;">
-                    <div><strong>${esc(name)}</strong></div>
-                    <div class="small">Flag: ${flag}</div>
-                    <div class="small muted">${submit}</div>
-                </div>`;
-            }).join('') : '<div class="muted">No solved flags yet.</div>';
-
-            const traceChallenge = document.getElementById('traceChallenge');
-            const currentChallenge = traceChallenge.value || (state.active[0] && state.active[0].challenge) || '';
-            traceChallenge.innerHTML = ['<option value="">Select a challenge</option>']
-                .concat(state.active.map(item => `<option value="${esc(item.challenge)}">${esc(item.challenge)}</option>`))
-                .join('');
-            if (currentChallenge) traceChallenge.value = currentChallenge;
-
-            const modelSet = new Set();
-            state.active.forEach(item => (item.models || []).forEach(m => modelSet.add(m)));
-            const traceModel = document.getElementById('traceModel');
-            const currentModel = traceModel.value || Array.from(modelSet)[0] || '';
-            traceModel.innerHTML = Array.from(modelSet).length ? Array.from(modelSet).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('') : '<option value="">No models</option>';
-            if (currentModel) traceModel.value = currentModel;
-        }
-
-        function setTraceTarget(challenge) {
-            const sel = document.getElementById('traceChallenge');
-            sel.value = challenge;
-            loadTrace();
-        }
-
-        async function stopChallenge(challenge) {
-            await fetch('/api/stop', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({challenge})
-            });
-            await refreshState();
-        }
-
-        async function loadTrace() {
-            const challenge = document.getElementById('traceChallenge').value;
-            const model = document.getElementById('traceModel').value;
-            const last_n = document.getElementById('traceCount').value || 30;
-            if (!challenge || !model) {
-                document.getElementById('traceBox').textContent = 'Select a challenge and model to view trace output.';
-                return;
-            }
-            const resp = await fetch(`/api/trace?challenge=${encodeURIComponent(challenge)}&model=${encodeURIComponent(model)}&last_n=${encodeURIComponent(last_n)}`);
-            const data = await resp.json();
-            document.getElementById('traceBox').textContent = data.trace || data.error || 'No trace data.';
-        }
-
-        async function sendMessage() {
-            const message = document.getElementById('messageBox').value;
-            const resp = await fetch('/api/message', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message})
-            });
-            const data = await resp.json();
-            document.getElementById('messageStatus').textContent = data.ok ? 'Queued.' : (data.error || 'Failed');
-            document.getElementById('messageBox').value = '';
-        }
-
-        refreshState();
-        setInterval(refreshState, 5000);
-    </script>
-</body>
-</html>"""
-
-
-async def _start_msg_server(deps: CoordinatorDeps, port: int = 0) -> asyncio.Server | None:
-    """Start a tiny dashboard server for operator messages and swarm control."""
-
-    async def _send(writer: asyncio.StreamWriter, status: str, content_type: str, body: str) -> None:
-        writer.write(
-            f"HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {len(body.encode())}\r\nCache-Control: no-store\r\n\r\n{body}".encode()
-        )
-
-    async def _read_body(reader: asyncio.StreamReader, headers: dict[str, str]) -> bytes:
+    async def _read_body(self, reader: asyncio.StreamReader, headers: dict[str, str]) -> bytes:
         content_length = int(headers.get("content-length", 0))
         if content_length <= 0:
             return b""
         return await asyncio.wait_for(reader.read(content_length), timeout=5)
 
-    async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            request_line = await asyncio.wait_for(reader.readline(), timeout=5)
+            request_line_bytes = await asyncio.wait_for(reader.readline(), timeout=5)
+            if not request_line_bytes:
+                return
+
             headers: dict[str, str] = {}
             while True:
                 line = await asyncio.wait_for(reader.readline(), timeout=5)
                 if line in (b"\r\n", b"\n", b""):
                     break
                 if b":" in line:
-                    k, v = line.decode().split(":", 1)
+                    k, v = line.decode("ascii", errors="replace").split(":", 1)
                     headers[k.strip().lower()] = v.strip()
 
-            parts = request_line.decode(errors="ignore").split()
-            method = parts[0] if len(parts) >= 1 else ""
-            target = parts[1] if len(parts) >= 2 else "/"
+            parts = request_line_bytes.decode("ascii", errors="ignore").split()
+            if len(parts) < 2:
+                return
+            method, target = parts[0], parts[1]
             url = urlparse(target)
             path = url.path or "/"
             query = parse_qs(url.query)
 
-            if method == "GET" and path == "/":
-                body = _dashboard_html()
-                await _send(writer, "200 OK", "text/html; charset=utf-8", body)
-
-            elif method == "GET" and path == "/api/state":
-                body = json.dumps(_dashboard_state(deps), indent=2)
-                await _send(writer, "200 OK", "application/json", body)
-
-            elif method == "GET" and path == "/api/trace":
-                challenge = query.get("challenge", [""])[0]
-                model = query.get("model", [""])[0]
-                last_n = int(query.get("last_n", ["30"])[0])
-                if not challenge or not model:
-                    body = json.dumps({"error": "challenge and model are required"}, indent=2)
-                    await _send(writer, "400 Bad Request", "application/json", body)
-                else:
-                    trace_text = await do_read_solver_trace(deps, challenge, model, last_n)
-                    body = json.dumps({"challenge": challenge, "model": model, "trace": trace_text}, indent=2)
-                    await _send(writer, "200 OK", "application/json", body)
-
-            elif method == "POST" and path == "/api/message":
-                body_bytes = await _read_body(reader, headers)
-                try:
-                    data = json.loads(body_bytes or b"{}")
-                    message = str(data.get("message", "")).strip()
-                except Exception:
-                    message = (body_bytes or b"").decode("utf-8", errors="replace").strip()
-
-                if not message:
-                    body = json.dumps({"error": "message required"}, indent=2)
-                    await _send(writer, "400 Bad Request", "application/json", body)
-                else:
-                    deps.operator_inbox.put_nowait(message)
-                    body = json.dumps({"ok": True, "queued": message[:200]}, indent=2)
-                    await _send(writer, "200 OK", "application/json", body)
-
-            elif method == "POST" and path == "/api/stop":
-                body_bytes = await _read_body(reader, headers)
-                challenge = ""
-                try:
-                    data = json.loads(body_bytes or b"{}")
-                    challenge = str(data.get("challenge", "")).strip()
-                except Exception:
-                    challenge = ""
-                if not challenge:
-                    body = json.dumps({"error": "challenge required"}, indent=2)
-                    await _send(writer, "400 Bad Request", "application/json", body)
-                else:
-                    body = await do_kill_swarm(deps, challenge)
-                    await _send(writer, "200 OK", "application/json", json.dumps({"ok": True, "result": body}, indent=2))
-
-            else:
-                body = json.dumps({"error": "not found"}, indent=2)
-                await _send(writer, "404 Not Found", "application/json", body)
-
+            await self._dispatch(method, path, query, headers, reader, writer)
             await writer.drain()
-        except Exception:
+        except (asyncio.TimeoutError, ConnectionResetError):
             pass
+        except Exception as e:
+            logger.debug("Dashboard handle error: %s", e)
         finally:
-            writer.close()
+            with contextlib.suppress(Exception):
+                writer.close()
+                await writer.wait_closed()
 
-    try:
-        server = await asyncio.start_server(_handle, "127.0.0.1", port)
-        actual_port = server.sockets[0].getsockname()[1]
-        logger.warning(f"Dashboard listening on http://127.0.0.1:{actual_port}")
-        return server
-    except OSError as e:
-        logger.warning(f"Could not start dashboard endpoint: {e}")
-        return None
+    async def _dispatch(
+        self,
+        method: str,
+        path: str,
+        query: dict[str, list[str]],
+        headers: dict[str, str],
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter
+    ) -> None:
+        if method == "GET" and path == "/":
+            if self._template_path.exists():
+                body = self._template_path.read_text(encoding="utf-8")
+            else:
+                body = "<h1>Dashboard Template Missing</h1>"
+            await self._send(writer, "200 OK", "text/html; charset=utf-8", body)
+
+        elif method == "GET" and path == "/api/state":
+            body = json.dumps(_dashboard_state(self.deps), indent=2)
+            await self._send(writer, "200 OK", "application/json", body)
+
+        elif method == "GET" and path == "/api/trace":
+            challenge = query.get("challenge", [""])[0]
+            model = query.get("model", [""])[0]
+            last_n_str = query.get("last_n", ["30"])[0]
+            try:
+                last_n = int(last_n_str)
+            except ValueError:
+                last_n = 30
+
+            if not challenge or not model:
+                body = json.dumps({"error": "challenge and model are required"}, indent=2)
+                await self._send(writer, "400 Bad Request", "application/json", body)
+            else:
+                trace_text = await do_read_solver_trace(self.deps, challenge, model, last_n)
+                body = json.dumps({"challenge": challenge, "model": model, "trace": trace_text}, indent=2)
+                await self._send(writer, "200 OK", "application/json", body)
+
+        elif method == "POST" and path == "/api/message":
+            body_bytes = await self._read_body(reader, headers)
+            try:
+                data = json.loads(body_bytes or b"{}")
+                message = str(data.get("message", "")).strip()
+            except Exception:
+                message = (body_bytes or b"").decode("utf-8", errors="replace").strip()
+
+            if not message:
+                body = json.dumps({"error": "message required"}, indent=2)
+                await self._send(writer, "400 Bad Request", "application/json", body)
+            else:
+                self.deps.operator_inbox.put_nowait(message)
+                body = json.dumps({"ok": True, "queued": message[:200]}, indent=2)
+                await self._send(writer, "200 OK", "application/json", body)
+
+        elif method == "POST" and path == "/api/stop":
+            body_bytes = await self._read_body(reader, headers)
+            try:
+                data = json.loads(body_bytes or b"{}")
+                challenge = str(data.get("challenge", "")).strip()
+            except Exception:
+                challenge = ""
+
+            if not challenge:
+                body = json.dumps({"error": "challenge required"}, indent=2)
+                await self._send(writer, "400 Bad Request", "application/json", body)
+            else:
+                result = await do_kill_swarm(self.deps, challenge)
+                await self._send(writer, "200 OK", "application/json", json.dumps({"ok": True, "result": result}, indent=2))
+
+        else:
+            body = json.dumps({"error": "not found"}, indent=2)
+            await self._send(writer, "404 Not Found", "application/json", body)
+
+
+async def _start_msg_server(deps: CoordinatorDeps, port: int = 0) -> DashboardServer | None:
+    """Start a tiny dashboard server for operator messages and swarm control."""
+    server = DashboardServer(deps)
+    await server.start(port)
+    return server

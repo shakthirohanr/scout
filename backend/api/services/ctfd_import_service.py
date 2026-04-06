@@ -22,6 +22,7 @@ from backend.api.repositories.ctf_repository import (
 )
 from backend.api.services.mappers import ctf_source_to_dict
 from backend.api.schemas import CTFImportRequest, CTFImportResponse
+from backend.api.utils import utcnow_iso
 
 
 NONCE_PATTERNS = (
@@ -101,14 +102,21 @@ class CTFdImportClient:
             raise CTFImportError("Credential login failed. Check username/password.")
 
     async def authenticate(self) -> None:
+        if self.auth_mode == "none":
+            return
         if self.auth_mode == "token":
             await self._verify_token()
             return
-        await self._login_with_credentials()
+        if self.auth_mode == "credentials":
+            await self._login_with_credentials()
+            return
+        raise CTFImportError(f"Unsupported auth mode: {self.auth_mode}")
 
     def _api_headers(self) -> dict[str, str]:
         if self.auth_mode == "token":
             return {"Authorization": f"Token {self.token}", "Content-Type": "application/json"}
+        if self.auth_mode == "credentials":
+            return {"Content-Type": "application/json"}
         return {"Content-Type": "application/json"}
 
     async def _get_json(self, path: str) -> dict[str, Any]:
@@ -341,14 +349,12 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
             set_import_status(session, ctf_source, status="success")
             source_summary = ctf_source_to_dict(ctf_source, challenge_count=imported_count)
 
-        from datetime import datetime, timezone
-
         return CTFImportResponse(
             ctf=source_summary,
             imported_challenges=imported_count,
             downloaded_files=downloaded_files,
             root_directory=str((Path(root) / str(source_summary["slug"])).resolve()),
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=utcnow_iso(),
         )
     except Exception as exc:
         with session_scope() as session:

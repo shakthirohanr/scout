@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
@@ -12,6 +13,20 @@ type ChallengePageProps = {
     id: string;
   }>;
 };
+
+export async function generateMetadata({ params }: ChallengePageProps): Promise<Metadata> {
+  const { id } = await params;
+  const [traces, catalog] = await Promise.all([
+    getTraceSummaries(),
+    getChallengeCatalog().catch(() => []),
+  ]);
+  const challengeItems = buildChallengeItems(traces, catalog);
+  const selected = challengeItems.find((item) => item.id === id) ?? null;
+
+  return {
+    title: selected ? selected.name : "CryptoAgent",
+  };
+}
 
 export default async function ChallengePage({ params }: ChallengePageProps) {
   const { id } = await params;

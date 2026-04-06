@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+__all__ = ["CTFdClient", "SubmitResult"]
+
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36"
@@ -377,9 +379,9 @@ class CTFdClient:
                             dest = dist_dir / cd_fname
 
                     dest.write_bytes(resp.content)
-                    logger.info(f"Downloaded: {dest.name} ({len(resp.content)} bytes)")
+                    logger.info("Downloaded: %s (%d bytes)", dest.name, len(resp.content))
                 except Exception as e:
-                    logger.warning(f"Failed to download {url}: {e}")
+                    logger.warning("Failed to download %s: %s", url, e)
 
         # Write metadata.yml
         from markdownify import markdownify as html2md
@@ -419,3 +421,9 @@ class CTFdClient:
     async def close(self) -> None:
         if self._client:
             await self._client.aclose()
+
+    async def __aenter__(self) -> "CTFdClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()

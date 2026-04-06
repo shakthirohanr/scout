@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
+import os
 import shlex
 import tarfile
 import tempfile
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import aiodocker
+
+__all__ = ["DockerSandbox", "ExecResult", "cleanup_challenge_containers", "configure_semaphore"]
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,18 @@ _active_count: int = 0
 _count_lock = asyncio.Lock()
 
 _WARN_THRESHOLDS = {100, 200, 500}
+
+
+def _is_pid_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def configure_semaphore(max_concurrent: int = 50) -> None:
@@ -55,13 +71,29 @@ async def cleanup_orphan_containers() -> None:
                 all=True,
                 filters={"label": [CONTAINER_LABEL]},
             )
+            removed = 0
             for c in containers:
                 try:
+                    info = await c.show()
+                    labels = info.get("Config", {}).get("Labels", {}) or {}
+                    owner_pid_raw = labels.get("ctf-agent-owner-pid", "")
+                    owner_pid = int(owner_pid_raw) if str(owner_pid_raw).isdigit() else 0
+                    status = str(info.get("State", {}).get("Status", "")).lower()
+
+                    # Legacy containers without owner labels: keep them if actively running.
+                    if not owner_pid and status == "running":
+                        continue
+
+                    # Preserve active containers owned by live processes.
+                    if owner_pid and _is_pid_running(owner_pid):
+                        continue
+
                     await c.delete(force=True)
+                    removed += 1
                 except Exception:
                     pass
-            if containers:
-                logger.info("Cleaned up %d orphan container(s)", len(containers))
+            if removed:
+                logger.info("Cleaned up %d orphan container(s)", removed)
         finally:
             await docker.close()
     except Exception as e:
@@ -179,7 +211,10 @@ class DockerSandbox:
                 "Cmd": ["sleep", "infinity"],
                 "WorkingDir": "/challenge",
                 "Tty": False,
-                "Labels": {CONTAINER_LABEL: "true"},
+                "Labels": {
+                    CONTAINER_LABEL: "true",
+                    "ctf-agent-owner-pid": str(os.getpid()),
+                },
                 "HostConfig": {
                     "Binds": binds,
                     "ExtraHosts": ["host.docker.internal:host-gateway"],
@@ -321,26 +356,38 @@ class DockerSandbox:
         Path(host_path).write_bytes(data)
 
     async def stop(self) -> None:
+        try:
+            await asyncio.wait_for(self._stop_inner(), timeout=30)
+        except TimeoutError:
+            logger.warning("Sandbox stop timed out after 30s — forcing cleanup")
+            self._container = None
+            if self._docker:
+                with contextlib.suppress(Exception):
+                    self._docker.close()
+                self._docker = None
+
+    async def _stop_inner(self) -> None:
         if self._container:
-            try:
+            with contextlib.suppress(Exception):
                 await self._container.delete(force=True)
-            except Exception:
-                pass
             self._container = None
             await _track_stop()
 
         if self._docker:
-            try:
+            with contextlib.suppress(Exception):
                 await self._docker.close()
-            except Exception:
-                pass
             self._docker = None
 
         if self.workspace_dir:
             import shutil
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(self.workspace_dir, ignore_errors=True)
-            except Exception:
-                pass
             self.workspace_dir = ""
         logger.info("Sandbox stopped")
+
+    async def __aenter__(self) -> "DockerSandbox":
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.stop()

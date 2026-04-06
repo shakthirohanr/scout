@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.schemas import RunOutputResponse, StartRunRequest
 from backend.api.state import RUN_MANAGER
+from backend.api.utils import utcnow_iso
 from backend.config import Settings
 from backend.run_config import load_ui_config, save_ui_config
 
@@ -16,15 +17,13 @@ from backend.run_config import load_ui_config, save_ui_config
 router = APIRouter(prefix="/api/v1", tags=["runs"])
 
 
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 @router.get("/runs")
 def runs() -> dict[str, Any]:
     return {
         "runs": RUN_MANAGER.list_runs(),
-        "generated_at": _utcnow_iso(),
+        "generated_at": utcnow_iso(),
     }
 
 

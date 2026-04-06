@@ -160,17 +160,17 @@ async def run_claude_coordinator(
 
     async with ClaudeSDKClient(options=options) as client:
         async def turn_fn(msg: str) -> None:
-            logger.debug(f"Coordinator query: {msg[:200]}")
+            logger.debug("Coordinator query: %s", msg[:200])
             await client.query(msg)
             msg_count = 0
             async for message in client.receive_response():
                 msg_count += 1
                 msg_type = type(message).__name__
-                logger.debug(f"Coordinator received: {msg_type}")
+                logger.debug("Coordinator received: %s", msg_type)
                 if isinstance(message, ResultMessage):
                     cost = getattr(message, "total_cost_usd", 0)
                     session = getattr(message, "session_id", None)
-                    logger.info(f"Claude coordinator turn done (messages={msg_count}, cost=${cost:.4f}, session={session})")
+                    logger.info("Claude coordinator turn done (messages=%s, cost=$%.4f, session=%s)", msg_count, cost, session)
             if msg_count == 0:
                 logger.warning("Coordinator turn produced no messages!")
 

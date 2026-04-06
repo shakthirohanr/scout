@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from backend.api.utils import utcnow_iso
 from backend.config import Settings
 from backend.local_challenges import LocalChallengeSummary, list_local_challenges
 
@@ -52,8 +53,6 @@ def _warn(reason: str) -> None:
     )
 
 
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _db_url(settings: Settings) -> str | None:
@@ -115,7 +114,7 @@ def _fallback_id(name: str) -> str:
 
 
 def _sync_fallback(challenges: list[LocalChallengeSummary]) -> list[ChallengeCatalogItem]:
-    now = _utcnow_iso()
+    now = utcnow_iso()
     result: list[ChallengeCatalogItem] = []
     for challenge in challenges:
         challenge_id = _fallback_id(challenge.name)
@@ -239,7 +238,7 @@ def mark_challenge_started(
             item = get_challenge_by_id(challenge_id, challenges_root, settings)
             if not item:
                 return None
-            now = _utcnow_iso()
+            now = utcnow_iso()
             updated = ChallengeCatalogItem(
                 id=item.id,
                 name=item.name,

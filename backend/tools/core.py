@@ -132,30 +132,44 @@ async def do_web_fetch(url: str, method: str = "GET", body: str = "") -> str:
 
 
 async def do_webhook_create() -> str:
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post("https://webhook.site/token")
-            if resp.status_code != 200:
-                return f"webhook.site error: HTTP {resp.status_code}"
-            data = resp.json()
-            return json.dumps({"uuid": data["uuid"], "url": f"https://webhook.site/{data['uuid']}"})
-    except Exception as e:
-        return f"webhook_create error: {e}"
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=10.0)) as client:
+                resp = await client.post("https://webhook.site/token")
+                if resp.status_code != 200:
+                    return f"webhook.site error: HTTP {resp.status_code}"
+                data = resp.json()
+                return json.dumps({"uuid": data["uuid"], "url": f"https://webhook.site/{data['uuid']}"})
+        except httpx.ConnectError:
+            if attempt == 0:
+                import asyncio
+                await asyncio.sleep(2)
+                continue
+            return "webhook_create error: connection failed after retry"
+        except Exception as e:
+            return f"webhook_create error: {e}"
 
 
 async def do_webhook_get_requests(uuid: str) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"https://webhook.site/token/{uuid}/requests")
-            if resp.status_code != 200:
-                return f"webhook.site error: HTTP {resp.status_code}"
-            data = resp.json()
-            if not data.get("data"):
-                return "No requests received yet."
-            out = json.dumps(data["data"], indent=2)
-            return out[:8000] if len(out) > 8000 else out
-    except Exception as e:
-        return f"webhook_get_requests error: {e}"
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=10.0)) as client:
+                resp = await client.get(f"https://webhook.site/token/{uuid}/requests")
+                if resp.status_code != 200:
+                    return f"webhook.site error: HTTP {resp.status_code}"
+                data = resp.json()
+                if not data.get("data"):
+                    return "No requests received yet."
+                out = json.dumps(data["data"], indent=2)
+                return out[:8000] if len(out) > 8000 else out
+        except httpx.ConnectError:
+            if attempt == 0:
+                import asyncio
+                await asyncio.sleep(2)
+                continue
+            return "webhook_get_requests error: connection failed after retry"
+        except Exception as e:
+            return f"webhook_get_requests error: {e}"
 
 
 async def do_check_findings(message_bus, model_spec: str) -> str:

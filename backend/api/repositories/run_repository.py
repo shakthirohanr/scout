@@ -10,12 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.db_models import SolverRun
+from backend.api.utils import utcnow
 
 ACTIVE_RUN_STATUSES = frozenset({"starting", "running"})
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 def upsert_run(session: Session, payload: dict[str, Any]) -> SolverRun:
@@ -39,10 +38,10 @@ def upsert_run(session: Session, payload: dict[str, Any]) -> SolverRun:
             latest_trace_id=payload.get("latest_trace_id"),
             trace_ids_json=trace_ids_json,
             exit_code=payload.get("exit_code"),
-            created_at=payload.get("created_at") or _utcnow(),
+            created_at=payload.get("created_at") or utcnow(),
             started_at=payload.get("started_at"),
             finished_at=payload.get("finished_at"),
-            updated_at=_utcnow(),
+            updated_at=utcnow(),
         )
         session.add(existing)
     else:
@@ -60,7 +59,7 @@ def upsert_run(session: Session, payload: dict[str, Any]) -> SolverRun:
         existing.exit_code = payload.get("exit_code")
         existing.started_at = payload.get("started_at")
         existing.finished_at = payload.get("finished_at")
-        existing.updated_at = _utcnow()
+        existing.updated_at = utcnow()
 
     session.flush()
     return existing

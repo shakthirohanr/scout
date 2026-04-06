@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import deque
 from dataclasses import dataclass, field
+
+__all__ = ["LoopDetector", "LOOP_WARNING_MESSAGE"]
 
 
 @dataclass
@@ -29,7 +32,8 @@ class LoopDetector:
         """
         if args:
             raw = json.dumps(args, sort_keys=True) if isinstance(args, dict) else str(args)
-            sig = f"{tool_name}:{raw[:500]}"
+            payload_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+            sig = f"{tool_name}:{payload_hash}"
         else:
             sig = tool_name
         self._recent.append(sig)

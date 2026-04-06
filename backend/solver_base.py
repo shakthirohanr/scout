@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+__all__ = ["FLAG_FOUND", "GAVE_UP", "CANCELLED", "ERROR", "QUOTA_ERROR", "CORRECT_MARKERS", "SolverResult"]
+
 # Status constants
 FLAG_FOUND = "flag_found"
 GAVE_UP = "gave_up"

@@ -19,13 +19,12 @@ from backend.api.services.catalog_service import (
 from backend.api.services.ctfd_import_service import CTFImportError, import_ctf_challenges
 from backend.api.services.mappers import ctf_source_to_dict
 from backend.api.state import RUN_MANAGER
+from backend.api.utils import utcnow_iso
 from backend.run_config import load_ui_config
 
 router = APIRouter(prefix="/api/v1", tags=["challenges"])
 
 
-def _utcnow_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 @router.get("/challenges")

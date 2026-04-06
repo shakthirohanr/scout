@@ -172,7 +172,7 @@ class CodexCoordinator:
             "dynamicTools": COORDINATOR_TOOLS,
         })
         self._thread_id = resp.get("result", {}).get("thread", {}).get("id", "")
-        logger.info(f"Codex coordinator started (thread={self._thread_id}, model={self.model})")
+        logger.info("Codex coordinator started (thread=%s, model=%s)", self._thread_id, self.model)
 
     async def turn(self, message: str) -> None:
         """Send a message and wait for the model to finish its turn."""
@@ -193,7 +193,7 @@ class CodexCoordinator:
             logger.warning("Codex coordinator turn timed out")
 
         if self._turn_error:
-            logger.warning(f"Codex coordinator turn error: {self._turn_error}")
+            logger.warning("Codex coordinator turn error: %s", self._turn_error)
 
     async def stop(self) -> None:
         if self._reader_task:
@@ -215,7 +215,7 @@ class CodexCoordinator:
         if params:
             msg["params"] = params
 
-        future: asyncio.Future[dict] = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[dict] = asyncio.get_running_loop().create_future()
         self._pending_responses[msg_id] = future
 
         self._proc.stdin.write((json.dumps(msg) + "\n").encode())
@@ -286,7 +286,7 @@ class CodexCoordinator:
         except Exception:
             args = {}
 
-        logger.debug(f"Coordinator tool call: {tool_name}({args})")
+        logger.debug("Coordinator tool call: %s(%s)", tool_name, args)
 
         try:
             result = await self._dispatch_tool(tool_name, args)
@@ -341,7 +341,7 @@ async def run_codex_coordinator(
     await coordinator.start()
 
     async def turn_fn(msg: str) -> None:
-        logger.debug(f"Coordinator query: {msg[:200]}")
+        logger.debug("Coordinator query: %s", msg[:200])
         await coordinator.turn(msg)
         logger.info("Codex coordinator turn done")
 

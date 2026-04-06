@@ -11,12 +11,11 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.api.db_models import Challenge, ChallengeFile, CTFSource, SolverRun
+from backend.api.utils import utcnow
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 def slugify(value: str) -> str:
@@ -65,7 +64,7 @@ def get_or_create_ctf_source(
     if existing:
         existing.auth_mode = auth_mode
         existing.challenges_root = challenges_root
-        existing.updated_at = _utcnow()
+        existing.updated_at = utcnow()
         session.flush()
         return existing
 
@@ -92,8 +91,8 @@ def set_import_status(
 ) -> None:
     source.last_import_status = status
     source.last_import_error = error
-    source.last_import_at = _utcnow()
-    source.updated_at = _utcnow()
+    source.last_import_at = utcnow()
+    source.updated_at = utcnow()
     session.flush()
 
 
@@ -140,7 +139,7 @@ def sync_challenge_with_run(
     challenge.steering_log_path = run.steering_log_path or None
     challenge.started_at = run.started_at
     challenge.finished_at = run.finished_at
-    challenge.updated_at = _utcnow()
+    challenge.updated_at = utcnow()
     session.flush()
     return challenge
 
@@ -159,7 +158,7 @@ def clear_challenge_session_data(session: Session, challenge_id: str) -> Challen
     challenge.steering_log_path = None
     challenge.started_at = None
     challenge.finished_at = None
-    challenge.updated_at = _utcnow()
+    challenge.updated_at = utcnow()
     session.flush()
     return challenge
 
@@ -193,7 +192,7 @@ def upsert_challenge(
         stmt = select(Challenge).where(Challenge.ctf_id == source.id, Challenge.slug == challenge_slug)
         challenge = session.execute(stmt).scalar_one_or_none()
 
-    now = _utcnow()
+    now = utcnow()
     if challenge is None:
         challenge = Challenge(
             id=secrets.token_urlsafe(9),

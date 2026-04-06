@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 from backend.cost_tracker import CostTracker
 from backend.ctfd import CTFdClient
 from backend.sandbox import DockerSandbox
+from backend.config import Settings
+ 
+__all__ = ["SubmitFn", "SolverDeps", "CoordinatorDeps"]
 
 if TYPE_CHECKING:
     from backend.message_bus import ChallengeMessageBus
@@ -39,7 +42,7 @@ class SolverDeps:
 class CoordinatorDeps:
     ctfd: CTFdClient
     cost_tracker: CostTracker
-    settings: Any
+    settings: Settings
     model_specs: list[str] = field(default_factory=list)
     challenges_root: str = "challenges"
     no_submit: bool = False

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
+from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.api.database import Base
+from backend.api.utils import utcnow
 
 
-def utcnow() -> datetime:
-    return datetime.now(UTC)
 
 
 class CTFSource(Base):

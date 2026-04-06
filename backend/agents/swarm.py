@@ -209,7 +209,7 @@ class ChallengeSwarm:
             solver = final_solver
             return result
         except Exception as e:
-            logger.error(f"[{self.meta.name}/{model_spec}] Fatal: {e}", exc_info=True)
+            logger.error("[%s/%s] Fatal: %s", self.meta.name, model_spec, e, exc_info=True)
             return None
         finally:
             await solver.stop()
@@ -397,7 +397,7 @@ class ChallengeSwarm:
             self.cancel_event.set()
             return self.winner
         except Exception as e:
-            logger.error(f"[{self.meta.name}] Swarm error: {e}", exc_info=True)
+            logger.error("[%s] Swarm error: %s", self.meta.name, e, exc_info=True)
             self.cancel_event.set()
             for t in tasks:
                 t.cancel()

@@ -21,6 +21,7 @@ from backend.api.repositories.ctf_repository import (
 from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES
 from backend.api.services.mappers import challenge_to_dict, ctf_source_to_dict
 from backend.api.services.run_manager_service import RunManager
+from backend.api.utils import utcnow_iso
 from backend.config import Settings
 from backend.local_challenges import list_local_challenges
 from backend.run_config import SolverRunConfig, load_ui_config
@@ -29,8 +30,6 @@ LOCAL_SOURCE_NAME = "Local Challenges"
 LOCAL_SOURCE_URL = "local://filesystem"
 
 
-def utcnow_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _is_under_any(path: Path, roots: list[Path]) -> bool:

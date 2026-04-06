@@ -140,7 +140,7 @@ async def run_kimi_coordinator(
 
     async def turn_fn(msg: str) -> None:
         nonlocal history
-        logger.debug(f"Coordinator query: {msg[:200]}")
+        logger.debug("Coordinator query: %s", msg[:200])
         result = await agent.run(
             msg,
             deps=deps,
