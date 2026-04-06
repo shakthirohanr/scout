@@ -205,10 +205,10 @@ export function LogTerminal({
         </div>
       </CardHeader>
 
-      <CardContent className="terminal-shell relative p-0">
+      <CardContent className="terminal-shell relative p-0 overscroll-contain">
         <div
           ref={terminalRootRef}
-          className="h-120 w-full px-5 py-5 md:h-136"
+          className="h-120 w-full px-5 py-5 md:h-136 xl:h-[calc(100vh-10rem)] overscroll-contain"
           aria-label="Agent log terminal"
         />
       </CardContent>

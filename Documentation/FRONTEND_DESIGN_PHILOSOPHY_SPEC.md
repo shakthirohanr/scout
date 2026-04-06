@@ -66,6 +66,20 @@ Use this as the default visual contract when adding or modifying UI.
 - Metadata style: small uppercase labels with increased tracking.
 - Body text: concise and subdued with muted-foreground for secondary content.
 
+### AI Agent Font Size Contract
+Use these as default sizing rules when creating or editing frontend screens.
+
+- Page title: `text-3xl font-semibold tracking-tight`
+- Page subtitle/description: `text-sm text-muted-foreground`
+- Section title (card/table section headers): `text-lg`
+- Card title (compact cards): `text-base`
+- Primary row/body text: `text-sm` to `text-base` depending density
+- Metadata/supporting labels: `text-xs` or `text-sm` with muted foreground
+- State labels: `text-sm uppercase tracking-[0.14em]` (or existing local equivalent)
+
+Consistency rule:
+- If one page in a flow uses the page title + subtitle pattern above, sibling pages in the same flow should match the same classes.
+
 ## Interaction and Motion
 - Motion is minimal and utilitarian (loading spinners, small transitions).
 - Focus states are explicit and accessible (ring-based).
@@ -174,6 +188,30 @@ Terminal rule:
 - Add deep elevation stacks, blur-heavy floating panels, or oversized rounded corners in dashboard views.
 - Replace established status colors with arbitrary alternatives.
 - Build parallel visual systems per page.
+
+## AI Agent Container Sizing Contract
+
+Use these container patterns for Home and Challenges style list/catalog pages.
+
+### Page shell
+- Root page wrapper: `flex min-h-full w-full flex-col bg-background px-4 py-6 sm:px-6 lg:px-8`
+- Header section wrapper: `mb-6`
+- Header content spacing: `space-y-2`
+- Main content wrapper: `flex-1 pr-1`
+
+### Primary content surfaces
+- Main surface container: `rounded-lg border border-border bg-card shadow-none`
+- Empty state container: `mt-8 rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground`
+
+### Alignment rule for sibling pages
+- If Home and Challenges are both part of the same navigation group, keep page-level horizontal and vertical paddings identical.
+- Avoid ad hoc per-page container drift such as mixing `px-4 py-6 sm:px-6 lg:px-8` with larger alternatives unless there is a documented product reason.
+
+### Agent implementation checklist
+- Check root page wrapper classes first.
+- Check header block spacing second (`mb-*`, `space-y-*`).
+- Check main surface border/radius/shadow tokens third.
+- Check empty-state container sizing and text scale last.
 
 ## Quick Palette Blocks for Agent Reuse
 

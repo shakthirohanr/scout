@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
+import type { ChallengeCatalogItem } from "@/lib/types";
+
 const SIDEBAR_COLLAPSED_KEY = "cryptoagent-sidebar-collapsed";
 const SIDEBAR_PREFERENCE_EVENT = "cryptoagent-sidebar-preference-change";
 
@@ -70,7 +72,11 @@ function setSidebarPreference(collapsed: boolean): void {
   window.dispatchEvent(new Event(SIDEBAR_PREFERENCE_EVENT));
 }
 
-export function SiteSidebar() {
+export function SiteSidebar({
+  runningChallenges = [],
+}: {
+  runningChallenges?: ChallengeCatalogItem[];
+}) {
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(
     subscribeToSidebarPreference,
@@ -145,15 +151,38 @@ export function SiteSidebar() {
         <nav className="flex-1 space-y-1 p-2">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const isChallenges = item.label === "Challenges";
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={navLinkClass(item.active, collapsed)}
-              >
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
-              </Link>
+              <div key={item.href} className="flex flex-col">
+                <Link
+                  href={item.href}
+                  className={navLinkClass(item.active && !isChallenges, collapsed)}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden="true" />
+                  {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                </Link>
+                {isChallenges && !collapsed && runningChallenges.length > 0 && (
+                  <div className="ml-5 mt-1 space-y-1 border-l border-border/60 pl-3">
+                    {runningChallenges.map((c) => {
+                      const cActive = pathname.startsWith(`/challenge/${c.id}`);
+                      return (
+                        <Link
+                          key={c.id}
+                          href={`/challenge/${encodeURIComponent(c.id)}`}
+                          className={cn(
+                            "flex h-8 items-center rounded-md px-2 text-xs font-medium transition-colors justify-start",
+                            cActive
+                              ? "bg-accent/50 text-foreground"
+                              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                          )}
+                        >
+                          <span className="truncate">{c.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

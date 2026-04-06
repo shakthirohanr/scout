@@ -6,7 +6,8 @@ import { SiteSidebar } from "@/components/navigation/site-sidebar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import "./globals.css";
+import { getChallengeCatalog } from "@/lib/backend";
+import type { ChallengeCatalogItem } from "@/lib/types";
 
 const headingFont = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -24,11 +25,19 @@ export const metadata: Metadata = {
   description: "CryptoAgent",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let runningChallenges: ChallengeCatalogItem[] = [];
+  try {
+    const catalog = await getChallengeCatalog();
+    runningChallenges = catalog.filter(
+      (c) => c.state === "starting" || c.state === "running"
+    );
+  } catch {}
+
   return (
     <html
       lang="en"
@@ -39,7 +48,7 @@ export default function RootLayout({
         <ThemeProvider>
           <TooltipProvider>
             <div className="flex h-full w-full overflow-hidden">
-              <SiteSidebar />
+              <SiteSidebar runningChallenges={runningChallenges} />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 <SiteHeader />
                 <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
