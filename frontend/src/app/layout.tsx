@@ -43,7 +43,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${headingFont.variable} ${monoFont.variable} h-full antialiased dark`}
+      className={`${headingFont.variable} ${monoFont.variable} h-full antialiased`}
     >
       <body className="h-full overflow-hidden">
         <ThemeProvider>

@@ -162,7 +162,7 @@ export function LogTerminal({
 
   return (
     <Card className={cn("gap-0 rounded-none flex flex-col border-border/60 bg-card py-0 shadow-none", className)}>
-      <CardHeader className="flex flex-col gap-5 border-b border-border/60 bg-[#e7eddc] px-6 py-5 md:flex-row md:items-center md:justify-between dark:bg-muted/35">
+      <CardHeader className="flex flex-col gap-5 border-b border-border/60 bg-muted/35 px-6 py-5 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {summary ? <StatusBadge status={summary.status} /> : null}

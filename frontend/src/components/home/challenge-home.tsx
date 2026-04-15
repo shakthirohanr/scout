@@ -229,7 +229,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
   }
 
   return (
-    <div className="flex min-h-full w-full flex-col bg-background px-4 py-6 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <section
         aria-labelledby="challenge-catalog-heading"
         className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
@@ -348,8 +348,9 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
 
                   <Button
                     type="submit"
+                    size="lg"
                     disabled={isImporting}
-                    className="mt-4 h-10 w-full gap-2 xl:mt-0"
+                    className="mt-4 w-full gap-2 xl:mt-0"
                   >
                     {isImporting ? (
                       <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
@@ -397,8 +398,9 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
 
                   <Button
                     type="submit"
+                    size="lg"
                     disabled={isImporting}
-                    className="mt-4 h-10 w-full gap-2 xl:mt-0"
+                    className="mt-4 w-full gap-2 xl:mt-0"
                   >
                     {isImporting ? (
                       <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
@@ -417,8 +419,9 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
 
                 <Button
                   type="submit"
+                  size="lg"
                   disabled={isImporting}
-                  className="mt-4 h-10 w-full gap-2 xl:mt-0"
+                  className="mt-4 w-full gap-2 xl:mt-0"
                 >
                   {isImporting ? (
                     <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
@@ -488,7 +491,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                               <Button
                                 type="button"
                                 size="sm"
-                                className="h-8 gap-1.5"
+                                className="gap-1.5"
                                 onClick={() => handleStart(challenge.id)}
                                 disabled={isStarting || isPending || challengeBusy}
                               >

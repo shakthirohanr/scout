@@ -74,8 +74,8 @@ export function SessionList({
                   "group w-full border p-5 text-left transition-all",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
                   isActive
-                    ? "border-primary/35 bg-[#dfe7d2]"
-                    : "border-border/60 bg-[#eef3e6] hover:border-primary/25 hover:bg-[#e7eddc] dark:bg-card/70 dark:hover:bg-card",
+                    ? "border-primary/35 bg-accent/60"
+                    : "border-border/60 bg-card/70 hover:border-primary/25 hover:bg-accent/45",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">

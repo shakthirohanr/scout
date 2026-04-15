@@ -34,10 +34,10 @@ function getSystemTheme(): ResolvedTheme {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === "undefined") {
-      return "dark";
+      return "system";
     }
     const initial = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return isTheme(initial) ? initial : "dark";
+    return isTheme(initial) ? initial : "system";
   });
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => getSystemTheme());
 

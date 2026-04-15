@@ -43,8 +43,8 @@ export function ChallengeSidebar({
                   "block border p-5 text-left transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
                   isActive
-                    ? "border-primary/35 bg-[#dfe7d2] dark:bg-accent/45"
-                    : "border-border/60 bg-[#eef3e6] hover:border-primary/25 hover:bg-[#e7eddc] dark:bg-card/70 dark:hover:bg-card",
+                    ? "border-primary/35 bg-accent/60"
+                    : "border-border/60 bg-card/70 hover:border-primary/25 hover:bg-accent/45",
                 )}
               >
                 <p className="text-base font-semibold leading-tight text-foreground">

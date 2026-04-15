@@ -70,19 +70,19 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="border border-border/60 bg-[#e7eddc] p-5 dark:bg-background/40">
+          <div className="border border-border/60 bg-muted/40 p-5">
             <p className="text-base text-muted-foreground">Trace file</p>
             <p className="mt-2 text-base font-medium break-all text-foreground">
               {trace.fileName}
             </p>
           </div>
-          <div className="border border-border/60 bg-[#e7eddc] p-5 dark:bg-background/40">
+          <div className="border border-border/60 bg-muted/40 p-5">
             <p className="text-base text-muted-foreground">Latest preview</p>
             <p className="mt-2 text-base leading-7 break-all text-foreground">
               {trace.preview}
             </p>
           </div>
-          <div className="border border-border/60 bg-[#e7eddc] p-5 dark:bg-background/40">
+          <div className="border border-border/60 bg-muted/40 p-5">
             <p className="text-base text-muted-foreground">Flag</p>
             <p className="mt-2 text-base font-medium break-all text-foreground">
               {trace.flag ?? "No confirmed flag recorded"}
@@ -102,7 +102,7 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
           <StatRow label="Estimated cost" value={`$${trace.costUsd.toFixed(2)}`} />
         </div>
 
-        <div className="border border-border/60 bg-[#e7eddc] p-5 dark:bg-background/40">
+        <div className="border border-border/60 bg-muted/40 p-5">
           <CardHeader className="p-0">
             <CardTitle className="text-base font-medium text-foreground">Runtime health</CardTitle>
           </CardHeader>

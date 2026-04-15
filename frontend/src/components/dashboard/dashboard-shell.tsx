@@ -117,7 +117,7 @@ export function DashboardShell({
   }, [activeChallenge?.name, activeChallengeName]);
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-background px-4 py-6 sm:px-6 lg:px-8 **:rounded-none">
+    <div className="page-shell overflow-hidden **:rounded-none">
       <main className="flex-1 min-h-0 pr-1">
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] h-full min-h-0 items-start">
           <div className="space-y-7 xl:order-last h-full overflow-hidden pr-2 pb-6 flex flex-col">
@@ -157,7 +157,7 @@ export function DashboardShell({
             </div>
           </section>
 
-            <Card className="rounded-none border-border/60 bg-[#f0f4e6] shadow-none dark:bg-card">
+            <Card className="rounded-none border-border/60 bg-card shadow-none">
               <CardHeader className="px-6 py-6 pb-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-2">
@@ -171,7 +171,7 @@ export function DashboardShell({
                     </CardTitle>
                   </div>
                   <div className="grid gap-3 text-base text-muted-foreground sm:grid-cols-2">
-                    <div className="border border-border/60 bg-[#e7eddc] px-5 py-4 dark:bg-background/40">
+                    <div className="border border-border/60 bg-muted/40 px-5 py-4">
                       <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
                         Active file
                       </span>
@@ -179,7 +179,7 @@ export function DashboardShell({
                         {selectedTrace?.fileName ?? "No file selected"}
                       </span>
                     </div>
-                    <div className="border border-border/60 bg-[#e7eddc] px-5 py-4 dark:bg-background/40">
+                    <div className="border border-border/60 bg-muted/40 px-5 py-4">
                       <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
                         Refresh state
                       </span>
