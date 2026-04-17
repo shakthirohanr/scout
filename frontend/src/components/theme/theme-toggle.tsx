@@ -24,7 +24,7 @@ export function ThemeToggle() {
             type="button"
             variant="outline"
             size="icon"
-            className="rounded-full border-border/70 bg-card/75 backdrop-blur-sm"
+            className="rounded-full"
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
             onClick={() => {
               if (!mounted) {

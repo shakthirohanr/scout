@@ -1,4 +1,4 @@
-"""Model resolution — Bedrock, Azure OpenAI, Zen, Google AI Studio."""
+"""Model resolution — Bedrock, Azure, Fireworks, Kimi, Zen, and Google."""
 
 from __future__ import annotations
 
@@ -17,10 +17,9 @@ from pydantic_ai.settings import ModelSettings
 if TYPE_CHECKING:
     from backend.config import Settings
 
-# Default model specs — single Kimi subagent per challenge
-DEFAULT_MODELS: list[str] = [
-    "kimi/kimi-k2p5-turbo",
-]
+# Default model fallback — overridden at runtime by DEFAULT_SOLVER_MODEL when set
+FALLBACK_DEFAULT_MODEL = "kimi/kimi-k2p5-turbo"
+DEFAULT_MODELS: list[str] = [FALLBACK_DEFAULT_MODEL]
 
 # Context window sizes (tokens)
 CONTEXT_WINDOWS: dict[str, int] = {
@@ -95,6 +94,17 @@ def resolve_model(spec: str, settings: Settings) -> Model:
                     api_key=settings.generic_openai_api_key or "sk-dummy",
                 ),
             )
+        case "fireworks":
+            return OpenAIModel(
+                model_id,
+                provider=OpenAIProvider(
+                    base_url=settings.fireworks_api_base_url,
+                    api_key=settings.fireworks_api_key
+                    or settings.generic_openai_api_key
+                    or settings.openai_api_key
+                    or "sk-dummy",
+                ),
+            )
         case "kimi":
             return OpenAIModel(
                 model_id,
@@ -126,7 +136,7 @@ def resolve_model_settings(spec: str) -> ModelSettings:
                 bedrock_cache_tool_definitions=True,
                 bedrock_cache_messages=True,
             )
-        case "azure" | "zen" | "generic-openai":
+        case "azure" | "zen" | "generic-openai" | "fireworks":
             # Azure/Zen use OpenAI chat completions — server-side prompt caching
             # is automatic, no explicit config needed. Set max_tokens to avoid
             # reserving the full context window.
@@ -147,12 +157,25 @@ def resolve_model_settings(spec: str) -> ModelSettings:
             return ModelSettings(max_tokens=128_000)
 
 
+def default_models(settings: Settings | None = None) -> list[str]:
+    """Return the configured default solver model list."""
+    if settings is None:
+        from backend.config import Settings as RuntimeSettings
+
+        settings = RuntimeSettings()
+    configured = (settings.default_solver_model or "").strip()
+    return [configured or FALLBACK_DEFAULT_MODEL]
+
+
 def model_id_from_spec(spec: str) -> str:
-    """Extract just the model ID from a spec (strips effort suffix)."""
+    """Extract just the model ID from a spec, preserving embedded path segments."""
     if "/" not in spec:
         return spec
     parts = spec.split("/")
-    return parts[1] if len(parts) >= 2 else spec
+    model_parts = parts[1:]
+    if effort_from_spec(spec) and model_parts:
+        model_parts = model_parts[:-1]
+    return "/".join(model_parts) if model_parts else spec
 
 
 def provider_from_spec(spec: str) -> str:
@@ -163,10 +186,13 @@ def provider_from_spec(spec: str) -> str:
 
 
 def effort_from_spec(spec: str) -> str | None:
-    """Extract effort level from a spec like 'claude-sdk/claude-opus-4-6/max'."""
+    """Extract effort level from specs that support an explicit suffix."""
+    provider = provider_from_spec(spec)
+    if provider not in {"claude-sdk", "codex"}:
+        return None
     parts = spec.split("/")
-    if len(parts) >= 3 and parts[2] in ("low", "medium", "high", "max"):
-        return parts[2]
+    if len(parts) >= 3 and parts[-1] in ("low", "medium", "high", "max"):
+        return parts[-1]
     return None
 
 

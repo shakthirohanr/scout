@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshCw, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { LogTerminal } from "@/components/dashboard/log-terminal";
@@ -111,7 +112,7 @@ export function DashboardShell({
   }, [activeChallenge?.name, activeChallengeName]);
 
   return (
-    <div className="page-shell overflow-hidden **:rounded-none">
+    <div className="page-shell h-full min-h-0 overflow-hidden **:rounded-none">
       <main className="min-h-0 flex-1 overflow-hidden pr-1 pb-6">
         <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] xl:items-stretch">
           <div className="flex min-h-0 flex-col">
@@ -152,12 +153,39 @@ export function DashboardShell({
                       </CardDescription>
                     </div>
 
-                    {selectedTrace ? (
-                      <StatusBadge status={selectedTrace.status} className="shrink-0" />
-                    ) : null}
+                    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:justify-end">
+                      {selectedTrace ? (
+                        <StatusBadge status={selectedTrace.status} className="shrink-0" />
+                      ) : null}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 gap-2 px-3 text-xs font-medium"
+                          onClick={refreshNow}
+                        >
+                          <RefreshCw className="size-3.5" />
+                          Sync
+                        </Button>
+
+                        {activeChallengeId && isAgentRunning ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleKillAgent}
+                            disabled={killPending}
+                            className="h-8 gap-2 px-3 text-xs font-medium"
+                          >
+                            <Square className="size-3.5 fill-current" />
+                            {killPending ? "Killing..." : "Kill Agent"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_auto] lg:items-stretch">
+                  <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)] lg:items-stretch">
                     <div className="border border-border/60 bg-[#e7eddc] px-4 py-3 dark:bg-background/40">
                       <span className="block text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         Active file
@@ -174,29 +202,6 @@ export function DashboardShell({
                       <span className="mt-1 block text-sm font-medium text-foreground">
                         {formatLastSync(lastSyncedAt)}
                       </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-end gap-2 border border-border/60 bg-[#e7eddc] px-3 py-3 dark:bg-background/40">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 gap-2 px-3 text-xs"
-                        onClick={refreshNow}
-                      >
-                        Sync
-                      </Button>
-
-                      {activeChallengeId && isAgentRunning ? (
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          onClick={handleKillAgent}
-                          disabled={killPending}
-                          className="h-8 px-3 text-xs"
-                        >
-                          {killPending ? "Killing..." : "Kill Agent"}
-                        </Button>
-                      ) : null}
                     </div>
                   </div>
                 </div>

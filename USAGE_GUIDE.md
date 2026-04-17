@@ -221,7 +221,22 @@ Then run:
 uv run ctf-solve solve ./prob1 --models generic-openai/gpt-4o-mini
 ```
 
-## 11. Common workflows
+## 11. Scenario: Fireworks AI
+
+Fireworks exposes an OpenAI-compatible endpoint, but its model IDs usually include path segments.
+
+```env
+FIREWORKS_API_BASE_URL=https://api.fireworks.ai/inference/v1
+FIREWORKS_API_KEY=your_fireworks_api_key
+```
+
+Then run:
+
+```bash
+uv run ctf-solve solve ./prob1 --models fireworks/accounts/fireworks/models/llama-v3p1-8b-instruct
+```
+
+## 12. Common workflows
 
 ### A. Local web challenge with a local service
 
@@ -249,7 +264,7 @@ Inside the folder:
 uv run ctf-solve solve-local --no-submit -v
 ```
 
-## 12. Helpful notes
+## 13. Helpful notes
 
 - `connection_info` should use `host.docker.internal` if the service is running on your host machine.
 - The agent rewrites local `127.0.0.1` / `localhost` service URLs for container access.
@@ -264,7 +279,7 @@ uv run ctf-solve solve ./prob1 \
   --models gpt-5.4-mini
 ```
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### Docker image not found
 
@@ -290,7 +305,7 @@ Check that:
 - `KIMI_API_BASE_URL` is correct
 - the proxy accepts OpenAI-style `/v1/chat/completions` requests
 
-## 14. Short command summary
+## 15. Short command summary
 
 ```bash
 uv sync

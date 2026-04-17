@@ -38,8 +38,11 @@ AZURE_OPENAI_API_KEY=
 OPENCODE_ZEN_API_KEY=
 GENERIC_OPENAI_BASE_URL=
 GENERIC_OPENAI_API_KEY=
+FIREWORKS_API_BASE_URL=https://api.fireworks.ai/inference/v1
+FIREWORKS_API_KEY=
 KIMI_API_BASE_URL=https://llm.proxies.of.achyuth.dev/v1
 KIMI_API_KEY=
+DEFAULT_SOLVER_MODEL=kimi/kimi-k2p5-turbo
 ```
 
 ### Infrastructure
@@ -168,6 +171,7 @@ Supported provider prefixes:
 
 - `bedrock`
 - `azure`
+- `fireworks`
 - `zen`
 - `google`
 - `generic-openai`
@@ -178,14 +182,13 @@ Supported provider prefixes:
 Special handling:
 
 - bare `kimi-k2p5-turbo` is treated as Kimi by `provider_from_spec()`
+- Fireworks model IDs may contain additional `/` path segments, for example `fireworks/accounts/fireworks/models/llama-v3p1-8b-instruct`
 - effort suffixes such as `claude-sdk/claude-opus-4-6/max` are parsed by `effort_from_spec()`
 
 Current default solver model list:
 
 ```python
-DEFAULT_MODELS = [
-    "kimi/kimi-k2p5-turbo",
-]
+default_models() -> [Settings().default_solver_model]
 ```
 
 ## 5. Current Model Selection Behavior
@@ -194,8 +197,8 @@ This is important enough to call out separately.
 
 The CLI helper `_resolve_single_model_specs()` currently:
 
-- uses `DEFAULT_MODELS` when no `--models` flag is given
-- falls back to `kimi/kimi-k2p5-turbo` if the resulting list is empty
+- uses `DEFAULT_SOLVER_MODEL` when no `--models` flag is given
+- falls back to `kimi/kimi-k2p5-turbo` if the env value is empty
 - keeps only the first model if more than one is provided
 - prints a warning when it drops additional specs
 

@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from backend.models import DEFAULT_MODELS
+from backend.models import default_models
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 UI_CONFIG_PATH = REPO_ROOT / ".ctf-agent-ui.json"
@@ -24,7 +24,7 @@ class SolverRunConfig(BaseModel):
     challenges_dir: str = "challenges"
     ctfd_url: str | None = None
     image: str = "ctf-sandbox"
-    models: list[str] = Field(default_factory=lambda: list(DEFAULT_MODELS) or ["kimi/kimi-k2p5-turbo"])
+    models: list[str] = Field(default_factory=default_models)
     no_submit: bool = True
     verbose: bool = False
     coordinator: CoordinatorBackend = "kimi"
@@ -37,7 +37,7 @@ class SolverRunConfig(BaseModel):
     def _validate_models(cls, value: list[str]) -> list[str]:
         normalized = [item.strip() for item in value if item and item.strip()]
         if not normalized:
-            return list(DEFAULT_MODELS) or ["kimi/kimi-k2p5-turbo"]
+            return default_models()
         deduped: list[str] = []
         for item in normalized:
             if item not in deduped:

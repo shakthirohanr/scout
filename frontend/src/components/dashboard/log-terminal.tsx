@@ -243,7 +243,7 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="h-11 border-border/60 bg-background/65 px-4 text-base"
+              className="h-11 px-4 text-base"
               onClick={() => {
                 const instance = instanceRef.current;
                 if (!instance || !searchValue.trim()) {
@@ -261,7 +261,7 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="h-11 border-border/60 bg-background/65 px-4 text-base"
+              className="h-11 px-4 text-base"
               onClick={() => {
                 const instance = instanceRef.current;
                 if (!instance || !searchValue.trim()) {
@@ -279,7 +279,7 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="h-11 gap-2 border-border/60 bg-background/65 px-4 text-base"
+              className="h-11 gap-2 px-4 text-base"
               onClick={onRefresh}
             >
               Refresh

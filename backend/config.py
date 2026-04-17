@@ -29,8 +29,11 @@ class Settings(BaseSettings):
     opencode_zen_api_key: str = ""
     generic_openai_base_url: str = ""
     generic_openai_api_key: str = ""
+    fireworks_api_base_url: str = "https://api.fireworks.ai/inference/v1"
+    fireworks_api_key: str = ""
     kimi_api_base_url: str = "https://llm.proxies.of.achyuth.dev/v1"
     kimi_api_key: str = "sk-3szEtbSmXUqO1lWI1cOCsA"
+    default_solver_model: str = "kimi/kimi-k2p5-turbo"
 
     # Infra
     sandbox_image: str = "ctf-sandbox"

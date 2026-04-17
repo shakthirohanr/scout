@@ -4,6 +4,8 @@ This guide focuses on how to run the repository as it is implemented today.
 
 Note: run Python and `uv` commands from `backend/` unless a command explicitly wraps `cd backend`.
 
+For a step-by-step explanation of API keys, provider env vars, and model spec selection, see `Documentation/MODEL_SETUP_GUIDE.md`.
+
 ## 1. Requirements
 
 You need:
@@ -135,6 +137,12 @@ Example:
 
 ```bash
 uv run ctf-solve solve ./prob1 --models generic-openai/gpt-4o-mini --no-submit -v
+```
+
+Fireworks models use the same OpenAI-compatible flow, but with the Fireworks provider prefix:
+
+```bash
+uv run ctf-solve solve ./prob1 --models fireworks/accounts/fireworks/models/llama-v3p1-8b-instruct
 ```
 
 ## 6. Solving Every Challenge Under a Root

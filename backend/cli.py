@@ -12,7 +12,7 @@ from rich.console import Console
 
 from backend.config import Settings
 from backend.local_challenges import local_challenge_dirs
-from backend.models import DEFAULT_MODELS
+from backend.models import FALLBACK_DEFAULT_MODEL, default_models
 
 console = Console()
 
@@ -26,9 +26,9 @@ def _make_settings(image: str, ctfd_url: str | None = None, ctfd_token: str | No
 
 
 def _resolve_single_model_specs(models: tuple[str, ...] | list[str]) -> list[str]:
-    specs = list(models) if models else list(DEFAULT_MODELS)
+    specs = list(models) if models else default_models()
     if not specs:
-        specs = ["kimi/kimi-k2p5-turbo"]
+        specs = [FALLBACK_DEFAULT_MODEL]
     if len(specs) > 1:
         console.print(
             f"[yellow]Swarming is disabled here; using only the first model: {specs[0]}[/yellow]"
@@ -102,7 +102,7 @@ def init(
 @click.option("--ctfd-token", default=None, help="CTFd API token (overrides .env)")
 @click.option("--offline", is_flag=True, help="Run without CTFd connection (manual mode)")
 @click.option("--image", default="ctf-sandbox", help="Docker sandbox image name")
-@click.option("--models", multiple=True, help="Model specs (default: all configured)")
+@click.option("--models", multiple=True, help="Model specs (default: DEFAULT_SOLVER_MODEL or kimi/kimi-k2p5-turbo)")
 @click.option("--challenge", default=None, help="Solve a single challenge directory")
 @click.option("--challenges-dir", default="challenges", help="Directory for challenge files")
 @click.option("--no-submit", is_flag=True, help="Dry run — don't submit flags")
@@ -160,7 +160,7 @@ def run(
 @cli.command()
 @click.argument("challenge_dir")
 @click.option("--image", default="ctf-sandbox", help="Docker sandbox image name")
-@click.option("--models", multiple=True, help="Model specs (default: all configured)")
+@click.option("--models", multiple=True, help="Model specs (default: DEFAULT_SOLVER_MODEL or kimi/kimi-k2p5-turbo)")
 @click.option("--no-submit", is_flag=True, help="Dry run — don't submit flags")
 @click.option("--max-challenges", default=10, type=int, help="Max challenges solved concurrently")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
@@ -182,7 +182,7 @@ def solve(
 
 @cli.command(name="solve-local")
 @click.option("--image", default="ctf-sandbox", help="Docker sandbox image name")
-@click.option("--models", multiple=True, help="Model specs (default: kimi/kimi-k2p5-turbo)")
+@click.option("--models", multiple=True, help="Model specs (default: DEFAULT_SOLVER_MODEL or kimi/kimi-k2p5-turbo)")
 @click.option("--no-submit", is_flag=True, help="Dry run — don't submit flags")
 @click.option("--max-challenges", default=10, type=int, help="Max challenges solved concurrently")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
@@ -204,7 +204,7 @@ def solve_local(
 @cli.command(name="solve-dir")
 @click.argument("challenges_root")
 @click.option("--image", default="ctf-sandbox", help="Docker sandbox image name")
-@click.option("--models", multiple=True, help="Model specs (default: all configured)")
+@click.option("--models", multiple=True, help="Model specs (default: DEFAULT_SOLVER_MODEL or kimi/kimi-k2p5-turbo)")
 @click.option("--no-submit", is_flag=True, help="Dry run — don't submit flags")
 @click.option("--max-challenges", default=10, type=int, help="Max challenges solved concurrently")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")

@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from backend.api.schemas import ConfigResponse
-from backend.api.services.system_service import info_payload, settings_summary
+from backend.api.services.system_service import fireworks_model_catalog, info_payload, settings_summary
 from backend.api.state import RUN_MANAGER
 from backend.config import Settings
 from backend.run_config import SolverRunConfig, save_ui_config
@@ -44,3 +44,8 @@ def put_config(config: SolverRunConfig) -> ConfigResponse:
         config_path=str(UI_CONFIG_PATH),
         settings_summary=settings_summary(settings),
     )
+
+
+@router.get("/models/fireworks")
+def get_fireworks_models() -> dict[str, Any]:
+    return fireworks_model_catalog(Settings())

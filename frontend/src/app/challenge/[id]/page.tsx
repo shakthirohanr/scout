@@ -43,11 +43,13 @@ export default async function ChallengePage({ params }: ChallengePageProps) {
   }
 
   return (
-    <DashboardShell
-      initialTraces={traces}
-      catalogChallenges={catalog}
-      activeChallengeId={id}
-      activeChallengeName={selected?.name ?? null}
-    />
+    <div className="h-full overflow-hidden">
+      <DashboardShell
+        initialTraces={traces}
+        catalogChallenges={catalog}
+        activeChallengeId={id}
+        activeChallengeName={selected?.name ?? null}
+      />
+    </div>
   );
 }

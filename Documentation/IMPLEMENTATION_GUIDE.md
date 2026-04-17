@@ -541,6 +541,7 @@ Provider prefixes map to different backends:
 
 - `bedrock/`
 - `azure/`
+- `fireworks/`
 - `zen/`
 - `google/`
 - `generic-openai/`
@@ -550,15 +551,15 @@ Provider prefixes map to different backends:
 
 Provider handling differs:
 
-- Kimi, generic OpenAI-compatible, Azure, Google, Bedrock, and Zen use the Pydantic AI solver
+- Kimi, Fireworks, generic OpenAI-compatible, Azure, Google, Bedrock, and Zen use the Pydantic AI solver
 - Claude SDK specs use the Claude solver backend
 - Codex specs use the Codex JSON-RPC backend
 
 The current default model list is:
 
-- `kimi/kimi-k2p5-turbo`
+- `Settings().default_solver_model`
 
-That default is defined in `DEFAULT_MODELS`.
+That runtime default falls back to `kimi/kimi-k2p5-turbo` when `DEFAULT_SOLVER_MODEL` is unset.
 
 ## 18. Current Behavior Notes
 
