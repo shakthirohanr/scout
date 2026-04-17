@@ -44,10 +44,47 @@ export function LogTerminal({
   const activeTheme = resolvedTheme === "light" ? "light" : "dark";
   const terminalRootRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<TerminalInstance | null>(null);
+  const writeQueueRef = useRef<string[]>([]);
+  const flushFrameRef = useRef<number | null>(null);
+  const writeInFlightRef = useRef(false);
   const [searchValue, setSearchValue] = useState("");
   const deferredSearch = useDeferredValue(searchValue);
 
   const prevContentRef = useRef<string>("");
+
+  const flushWriteQueue = useEffectEvent(function runFlushWriteQueue() {
+    const instance = instanceRef.current;
+    if (!instance || writeInFlightRef.current || !writeQueueRef.current.length) {
+      return;
+    }
+
+    writeInFlightRef.current = true;
+    const chunk = writeQueueRef.current.join("");
+    writeQueueRef.current = [];
+
+    instance.terminal.write(chunk, () => {
+      writeInFlightRef.current = false;
+      if (writeQueueRef.current.length) {
+        runFlushWriteQueue();
+      }
+    });
+  });
+
+  const enqueueWrite = useEffectEvent((chunk: string) => {
+    if (!chunk) {
+      return;
+    }
+
+    writeQueueRef.current.push(chunk);
+    if (flushFrameRef.current !== null) {
+      return;
+    }
+
+    flushFrameRef.current = window.requestAnimationFrame(() => {
+      flushFrameRef.current = null;
+      flushWriteQueue();
+    });
+  });
 
   const writeContent = useEffectEvent((nextContent: string) => {
     const instance = instanceRef.current;
@@ -60,6 +97,10 @@ export function LogTerminal({
     const safeContent = nextContent || "No trace output available yet.\n";
     const prevContent = prevContentRef.current;
     
+    if (safeContent === prevContent) {
+      return;
+    }
+
     if (prevContent && safeContent.startsWith(prevContent)) {
       const appended = safeContent.slice(prevContent.length);
       if (appended) {
@@ -68,15 +109,20 @@ export function LogTerminal({
         const buffer = instance.terminal.buffer.active;
         const isAtBottom = buffer.viewportY === buffer.baseY;
 
-        instance.terminal.write(appended);
+        enqueueWrite(appended);
 
         if (isAtBottom) {
           instance.terminal.scrollToBottom();
         }
       }
+    } else if (prevContent.startsWith(safeContent)) {
+      // Ignore out-of-order stale snapshots to avoid destructive redraw flicker.
+      return;
     } else {
+      writeQueueRef.current = [];
+      writeInFlightRef.current = false;
       instance.terminal.reset();
-      instance.terminal.write(safeContent);
+      enqueueWrite(safeContent);
       instance.terminal.scrollToBottom();
     }
     
@@ -96,6 +142,9 @@ export function LogTerminal({
       fontFamily: "var(--font-mono)",
       fontSize: 14,
       lineHeight: 1.45,
+      smoothScrollDuration: 120,
+      scrollSensitivity: 1.1,
+      fastScrollSensitivity: 4,
       scrollback: 7000,
       theme: terminalThemes[activeTheme],
     });
@@ -107,6 +156,7 @@ export function LogTerminal({
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(webLinksAddon);
     terminal.open(terminalRootRef.current);
+    terminal.attachCustomWheelEventHandler(() => true);
     fitAddon.fit();
 
     const resizeObserver = new ResizeObserver(() => {
@@ -125,6 +175,12 @@ export function LogTerminal({
     writeContent(content);
 
     return () => {
+      if (flushFrameRef.current !== null) {
+        window.cancelAnimationFrame(flushFrameRef.current);
+        flushFrameRef.current = null;
+      }
+      writeQueueRef.current = [];
+      writeInFlightRef.current = false;
       resizeObserver.disconnect();
       terminal.dispose();
       instanceRef.current = null;

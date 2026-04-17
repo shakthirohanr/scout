@@ -27,9 +27,9 @@ function StatRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border border-border/60 bg-background/50 px-5 py-4">
-      <span className="text-base text-muted-foreground">{label}</span>
-      <span className="text-base font-medium text-foreground">{value}</span>
+    <div className="flex items-center justify-between gap-3 border border-border/60 bg-background/50 px-3 py-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-foreground">{value}</span>
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
   if (!trace) {
     return (
       <Card className="rounded-none border-border/60 bg-card shadow-none">
-        <CardContent className="p-6 text-base text-muted-foreground">
+        <CardContent className="p-4 text-sm text-muted-foreground">
           Select a trace to inspect the run summary and token usage.
         </CardContent>
       </Card>
@@ -46,21 +46,26 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
   }
 
   return (
-    <Tabs defaultValue="summary" className="rounded-none border border-border/60 bg-card p-6 md:p-7 shadow-none">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <CardTitle className="text-xl font-semibold text-foreground">Trace details</CardTitle>
-        </div>
+    <Tabs
+      defaultValue="summary"
+      className="rounded-none border border-border/60 bg-card p-4 shadow-none"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <CardTitle className="text-base font-semibold text-foreground">Trace details</CardTitle>
         <StatusBadge status={trace.status} />
       </div>
 
-      <TabsList className="mb-5 grid w-full grid-cols-2 rounded-none">
-        <TabsTrigger value="summary" className="rounded-none text-base">Summary</TabsTrigger>
-        <TabsTrigger value="usage" className="rounded-none text-base">Usage</TabsTrigger>
+      <TabsList className="mb-3 grid w-full grid-cols-2 rounded-none">
+        <TabsTrigger value="summary" className="rounded-none text-sm">
+          Summary
+        </TabsTrigger>
+        <TabsTrigger value="usage" className="rounded-none text-sm">
+          Usage
+        </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="summary" className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <TabsContent value="summary" className="space-y-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <StatRow label="Challenge" value={trace.challengeName} />
           <StatRow label="Model" value={trace.modelName} />
           <StatRow label="Started" value={formatDate(trace.startedAt)} />
@@ -69,30 +74,30 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
           <StatRow label="Events" value={trace.eventCount.toString()} />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="border border-border/60 bg-muted/40 p-5">
-            <p className="text-base text-muted-foreground">Trace file</p>
-            <p className="mt-2 text-base font-medium break-all text-foreground">
+        <div className="grid gap-2 md:grid-cols-3">
+          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+            <p className="text-xs text-muted-foreground">Trace file</p>
+            <p className="mt-1 line-clamp-2 break-all text-xs font-medium text-foreground">
               {trace.fileName}
             </p>
           </div>
-          <div className="border border-border/60 bg-muted/40 p-5">
-            <p className="text-base text-muted-foreground">Latest preview</p>
-            <p className="mt-2 text-base leading-7 break-all text-foreground">
+          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+            <p className="text-xs text-muted-foreground">Latest preview</p>
+            <p className="mt-1 line-clamp-3 break-all text-xs leading-5 text-foreground">
               {trace.preview}
             </p>
           </div>
-          <div className="border border-border/60 bg-muted/40 p-5">
-            <p className="text-base text-muted-foreground">Flag</p>
-            <p className="mt-2 text-base font-medium break-all text-foreground">
+          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+            <p className="text-xs text-muted-foreground">Flag</p>
+            <p className="mt-1 line-clamp-2 break-all text-xs font-medium text-foreground">
               {trace.flag ?? "No confirmed flag recorded"}
             </p>
           </div>
         </div>
       </TabsContent>
 
-      <TabsContent value="usage" className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <TabsContent value="usage" className="space-y-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <StatRow label="Input tokens" value={trace.inputTokens.toLocaleString("en-US")} />
           <StatRow label="Output tokens" value={trace.outputTokens.toLocaleString("en-US")} />
           <StatRow
@@ -102,12 +107,12 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
           <StatRow label="Estimated cost" value={`$${trace.costUsd.toFixed(2)}`} />
         </div>
 
-        <div className="border border-border/60 bg-muted/40 p-5">
+        <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
           <CardHeader className="p-0">
-            <CardTitle className="text-base font-medium text-foreground">Runtime health</CardTitle>
+            <CardTitle className="text-sm font-medium text-foreground">Runtime health</CardTitle>
           </CardHeader>
           {detail ? (
-            <p className="mt-2 text-base leading-7 text-muted-foreground">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {detail.events.length} parsed events
             </p>
           ) : null}

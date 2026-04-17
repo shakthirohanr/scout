@@ -50,12 +50,9 @@ export function DashboardShell({
     setSelectedId,
     selectedTrace,
     detail,
-    listPending,
-    detailPending,
     error,
     lastSyncedAt,
     refreshNow,
-    totals,
   } = useLogDashboard(
     initialTraces,
     activeChallengeId,
@@ -94,14 +91,10 @@ export function DashboardShell({
     }
   }
 
-  const hasRunningTrace = filteredTraces.some((t) => t.status === "running");
-  const hasTerminalTrace = filteredTraces.some((t) =>
-    ["solved", "gave_up", "cancelled", "finished", "failed", "error"].includes(t.status)
+  const hasRunningTrace = filteredTraces.some((trace) => trace.status === "running");
+  const hasTerminalTrace = filteredTraces.some((trace) =>
+    ["solved", "gave_up", "cancelled", "finished", "failed", "error"].includes(trace.status)
   );
-  
-  // The agent is considered running if:
-  // 1. We have a live trace explicitly saying it's running
-  // 2. OR the challenge is starting/running and we haven't yet received a terminal state update
   const isAgentRunning =
     hasRunningTrace ||
     ((activeChallenge?.state === "starting" || activeChallenge?.state === "running") &&
@@ -113,79 +106,97 @@ export function DashboardShell({
       document.title = "CryptoAgent";
       return;
     }
+
     document.title = challengeTitle;
   }, [activeChallenge?.name, activeChallengeName]);
 
   return (
     <div className="page-shell overflow-hidden **:rounded-none">
-      <main className="flex-1 min-h-0 pr-1">
-        <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] h-full min-h-0 items-start">
-          <div className="space-y-7 xl:order-last h-full overflow-hidden pr-2 pb-6 flex flex-col">
-            <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">
-                Challenge workspace
-              </p>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                {activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Inspect trace output, steer the agent, and manage active sessions.
-              </p>
-            </div>
+      <main className="min-h-0 flex-1 overflow-hidden pr-1 pb-6">
+        <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] xl:items-stretch">
+          <div className="flex min-h-0 flex-col">
+            {filteredTraces.length ? (
+              <LogTerminal
+                summary={selectedTrace}
+                content={detail?.terminalOutput ?? ""}
+                onRefresh={refreshNow}
+                className="h-full min-h-0"
+              />
+            ) : (
+              <Card className="rounded-none border-dashed border-border/70 bg-card shadow-none">
+                <CardContent className="p-12 text-center">
+                  <h2 className="text-xl font-semibold text-foreground">
+                    No active session selected
+                  </h2>
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {activeChallengeId && isAgentRunning ? (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleKillAgent}
-                  disabled={killPending}
-                >
-                  {killPending ? "Killing..." : "Kill Agent"}
-                </Button>
-              ) : null}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={refreshNow}
-              >
-                Sync
-              </Button>
-            </div>
-          </section>
-
-            <Card className="rounded-none border-border/60 bg-card shadow-none">
-              <CardHeader className="px-6 py-6 pb-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {selectedTrace ? <StatusBadge status={selectedTrace.status} /> : null}
+          <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+            <Card className="rounded-none border-border/60 bg-[#f0f4e6] shadow-none dark:bg-card">
+              <CardHeader className="px-4 py-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1.5">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Challenge workspace
+                      </p>
+                      <CardTitle className="text-lg font-semibold text-foreground sm:text-xl">
+                        {selectedTrace
+                          ? `${selectedTrace.challengeName} on ${selectedTrace.modelName}`
+                          : activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
+                      </CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground sm:text-sm">
+                        Inspect trace output, steer the agent, and manage active sessions.
+                      </CardDescription>
                     </div>
-                    <CardTitle className="text-xl font-semibold sm:text-2xl">
-                      {selectedTrace
-                        ? `${selectedTrace.challengeName} on ${selectedTrace.modelName}`
-                        : activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
-                    </CardTitle>
+
+                    {selectedTrace ? (
+                      <StatusBadge status={selectedTrace.status} className="shrink-0" />
+                    ) : null}
                   </div>
-                  <div className="grid gap-3 text-base text-muted-foreground sm:grid-cols-2">
-                    <div className="border border-border/60 bg-muted/40 px-5 py-4">
-                      <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
+
+                  <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_auto] lg:items-stretch">
+                    <div className="border border-border/60 bg-[#e7eddc] px-4 py-3 dark:bg-background/40">
+                      <span className="block text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         Active file
                       </span>
-                      <span className="mt-1.5 block text-base font-medium text-foreground">
+                      <span className="mt-1 block text-sm font-medium text-foreground">
                         {selectedTrace?.fileName ?? "No file selected"}
                       </span>
                     </div>
-                    <div className="border border-border/60 bg-muted/40 px-5 py-4">
-                      <span className="block text-sm uppercase tracking-[0.18em] text-muted-foreground">
+
+                    <div className="border border-border/60 bg-[#e7eddc] px-4 py-3 dark:bg-background/40">
+                      <span className="block text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         Refresh state
                       </span>
-                      <span className="mt-1.5 block text-base font-medium text-foreground">
+                      <span className="mt-1 block text-sm font-medium text-foreground">
                         {formatLastSync(lastSyncedAt)}
                       </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2 border border-border/60 bg-[#e7eddc] px-3 py-3 dark:bg-background/40">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 gap-2 px-3 text-xs"
+                        onClick={refreshNow}
+                      >
+                        Sync
+                      </Button>
+
+                      {activeChallengeId && isAgentRunning ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={handleKillAgent}
+                          disabled={killPending}
+                          className="h-8 px-3 text-xs"
+                        >
+                          {killPending ? "Killing..." : "Kill Agent"}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -201,42 +212,27 @@ export function DashboardShell({
             {activeChallengeId ? <SteeringPanel challengeId={activeChallengeId} /> : null}
 
             {filteredTraces.length > 1 ? (
-              <Card className="rounded-none border-border/60 bg-card shadow-none">
-                <CardHeader className="px-6 py-5 pb-3">
-                  <CardTitle className="text-lg">Session Traces</CardTitle>
+              <Card className="min-h-0 max-h-[22rem] rounded-none border-border/60 bg-card shadow-none">
+                <CardHeader className="px-4 py-3 pb-2">
+                  <CardTitle className="text-base">Session Traces</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Switch between challenge runs without leaving the dashboard.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 pt-0">
+                <CardContent className="min-h-0 flex-1 p-4 pt-0">
                   <SessionList
                     traces={filteredTraces}
                     selectedId={selectedId}
                     onSelect={(traceId) => setSelectedId(traceId)}
+                    className="h-full"
                   />
                 </CardContent>
               </Card>
             ) : null}
 
-            <div className="flex flex-col">
+            <div className="min-h-0 flex-1 overflow-auto pr-1">
               <TraceOverview trace={selectedTrace} detail={detail} />
             </div>
-          </div>
-
-          <div className="xl:order-first flex flex-col min-h-0">
-            {filteredTraces.length ? (
-              <LogTerminal
-                summary={selectedTrace}
-                content={detail?.terminalOutput ?? ""}
-                onRefresh={refreshNow}
-                className="h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)]"
-              />
-            ) : (
-              <Card className="rounded-none border-dashed border-border/70 bg-card shadow-none">
-                <CardContent className="p-12 text-center">
-                  <h2 className="text-xl font-semibold text-foreground">
-                    No active session selected
-                  </h2>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </main>

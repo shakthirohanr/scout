@@ -57,16 +57,33 @@ class CTFdClient:
             )
         return self._client
 
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        client = await self._ensure_client()
+        for attempt in range(5):
+            try:
+                resp = await client.request(method, path, **kwargs)
+                if resp.status_code in (502, 503, 504, 408):
+                    resp.raise_for_status()
+                return resp
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                # If HTTPStatusError, we only retry specific 5xx/408 errors
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code not in (502, 503, 504, 408):
+                    raise
+                if attempt == 4:
+                    raise
+                logger.warning("HTTP %s %s failed (%s), retrying in %ds...", method, path, e, 2 ** attempt)
+                await asyncio.sleep(2 ** attempt)
+        raise RuntimeError("Unreachable")
+
     async def _ensure_logged_in(self) -> None:
         if self.is_mock:
             return
 
         if self._logged_in or self.token:
             return
-        client = await self._ensure_client()
 
         # GET login page for nonce
-        resp = await client.get("/login")
+        resp = await self._request("GET", "/login")
         m = re.search(r'id="nonce"[^>]*value="([^"]+)"', resp.text)
         if not m:
             m = re.search(r'name="nonce"[^>]*value="([^"]+)"', resp.text)
@@ -75,7 +92,8 @@ class CTFdClient:
         nonce = m.group(1)
 
         # POST credentials
-        resp = await client.post(
+        resp = await self._request(
+            "POST",
             "/login",
             data={
                 "name": self.username,
@@ -92,8 +110,7 @@ class CTFdClient:
     async def _get_csrf(self) -> str:
         if self._csrf_token:
             return self._csrf_token
-        client = await self._ensure_client()
-        resp = await client.get("/challenges")
+        resp = await self._request("GET", "/challenges")
         m = re.search(r"csrfNonce':\s*\"([A-Fa-f0-9]+)\"", resp.text)
         if not m:
             raise RuntimeError("Could not find csrfNonce on CTFd challenges page")
@@ -108,33 +125,52 @@ class CTFdClient:
 
     async def _get(self, path: str) -> Any:
         await self._ensure_logged_in()
-        client = await self._ensure_client()
-        resp = await client.get(f"/api/v1{path}", headers=self._base_headers())
-        resp.raise_for_status()
-        return resp.json()
+        for attempt in range(5):
+            try:
+                resp = await self._request("GET", f"/api/v1{path}", headers=self._base_headers())
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code not in (502, 503, 504, 408):
+                    raise
+                if attempt == 4:
+                    raise
+                logger.warning("HTTP GET API failed (%s), retrying in %ds...", e, 2 ** attempt)
+                await asyncio.sleep(2 ** attempt)
 
     async def _post(self, path: str, body: dict[str, Any]) -> Any:
         await self._ensure_logged_in()
-        client = await self._ensure_client()
         headers = self._base_headers()
         if not self.token:
             headers["CSRF-Token"] = await self._get_csrf()
-        resp = await client.post(
-            f"/api/v1{path}",
-            json=body,
-            headers=headers,
-        )
-        # Retry once on 403 — CSRF token may have gone stale
-        if resp.status_code == 403 and not self.token:
-            self._csrf_token = ""
-            headers["CSRF-Token"] = await self._get_csrf()
-            resp = await client.post(
-                f"/api/v1{path}",
-                json=body,
-                headers=headers,
-            )
-        resp.raise_for_status()
-        return resp.json()
+        
+        for attempt in range(5):
+            try:
+                resp = await self._request(
+                    "POST",
+                    f"/api/v1{path}",
+                    json=body,
+                    headers=headers,
+                )
+                # Retry once on 403 — CSRF token may have gone stale
+                if resp.status_code == 403 and not self.token and attempt == 0:
+                    self._csrf_token = ""
+                    headers["CSRF-Token"] = await self._get_csrf()
+                    resp = await self._request(
+                        "POST",
+                        f"/api/v1{path}",
+                        json=body,
+                        headers=headers,
+                    )
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code not in (502, 503, 504, 408):
+                    raise
+                if attempt == 4:
+                    raise
+                logger.warning("HTTP POST API failed (%s), retrying in %ds...", e, 2 ** attempt)
+                await asyncio.sleep(2 ** attempt)
 
     async def fetch_challenge_stubs(self) -> list[dict[str, Any]]:
         """Fetch lightweight challenge list (no per-challenge detail fetch)."""
