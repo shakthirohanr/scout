@@ -22,6 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { ChallengeCatalogItem, ChallengeRunState, ImportCTFInput } from "@/lib/types";
 
 type ChallengeHomeProps = {
@@ -43,27 +49,13 @@ function formatStartedAt(value: string | null): string {
 }
 
 function formatChallengeState(state: ChallengeRunState): string {
-  if (state === "starting") {
-    return "Starting";
-  }
-  if (state === "running") {
-    return "Running";
-  }
-  if (state === "solved") {
-    return "Solved";
-  }
-  if (state === "gave_up") {
-    return "Gave up";
-  }
-  if (state === "cancelled") {
-    return "Cancelled";
-  }
-  if (state === "failed") {
-    return "Failed";
-  }
-  if (state === "finished") {
-    return "Finished";
-  }
+  if (state === "starting") return "Starting";
+  if (state === "running") return "Running";
+  if (state === "solved") return "Solved";
+  if (state === "gave_up") return "Gave up";
+  if (state === "cancelled") return "Cancelled";
+  if (state === "failed") return "Failed";
+  if (state === "finished") return "Finished";
   return "Idle";
 }
 
@@ -233,19 +225,8 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
     <div className="page-shell">
       <section
         aria-labelledby="challenge-catalog-heading"
-        className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+        className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-end"
       >
-        <div className="space-y-2">
-          <h1
-            id="challenge-catalog-heading"
-            className="text-3xl font-semibold tracking-tight text-foreground"
-          >
-            Challenge Catalog
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Import CTFs from CTFd, browse challenges, and launch the solver agent.
-          </p>
-        </div>
         <div className="w-full sm:w-96">
           <Input
             value={query}
@@ -257,7 +238,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         </div>
       </section>
 
-      <Card className="mb-6 border-border bg-card shadow-none">
+      <Card className="mb-8 border-border bg-card shadow-sm">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-base text-card-foreground">
             <ShieldPlus className="size-5 text-muted-foreground" aria-hidden="true" />
@@ -267,7 +248,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={handleImport}>
             <div className="space-y-2">
-              <label htmlFor="ctf-name" className="text-xs uppercase tracking-wide text-muted-foreground">
+              <label htmlFor="ctf-name" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
                 CTF Name
               </label>
               <Input
@@ -280,7 +261,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="ctf-url" className="text-xs uppercase tracking-wide text-muted-foreground">
+              <label htmlFor="ctf-url" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
                 CTFd URL
               </label>
               <Input
@@ -293,7 +274,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="ctf-root" className="text-xs uppercase tracking-wide text-muted-foreground">
+              <label htmlFor="ctf-root" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
                 Challenges Root
               </label>
               <Input
@@ -306,7 +287,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs uppercase tracking-wide text-muted-foreground">Auth Mode</label>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Auth Mode</label>
               <Select
                 value={authMode}
                 onValueChange={(value) => setAuthMode(value as AuthMode)}
@@ -331,87 +312,83 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             </div>
 
             {authMode === "token" ? (
-              <>
-                <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
-                  <div className="space-y-2">
-                    <label htmlFor="ctf-token" className="text-xs uppercase tracking-wide text-muted-foreground">
-                      CTFd Token
-                    </label>
-                    <Input
-                      id="ctf-token"
-                      value={token}
-                      onChange={(event) => setToken(event.target.value)}
-                      type="password"
-                      placeholder="ctfd_xxxxxxxxx"
-                      className="h-10"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={isImporting}
-                    className="mt-4 w-full gap-2 xl:mt-0"
-                  >
-                    {isImporting ? (
-                      <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Upload className="size-4" aria-hidden="true" />
-                    )}
-                    Import CTF
-                  </Button>
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="ctf-token" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+                    CTFd Token
+                  </label>
+                  <Input
+                    id="ctf-token"
+                    value={token}
+                    onChange={(event) => setToken(event.target.value)}
+                    type="password"
+                    placeholder="ctfd_xxxxxxxxx"
+                    className="h-10"
+                  />
                 </div>
-              </>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={isImporting}
+                  className="mt-4 w-full gap-2 xl:mt-0"
+                >
+                  {isImporting ? (
+                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Upload className="size-4" aria-hidden="true" />
+                  )}
+                  Import CTF
+                </Button>
+              </div>
             ) : authMode === "credentials" ? (
-              <>
-                <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="ctf-username"
-                      className="text-xs uppercase tracking-wide text-muted-foreground"
-                    >
-                      Username
-                    </label>
-                    <Input
-                      id="ctf-username"
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      placeholder="teamname"
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="ctf-password"
-                      className="text-xs uppercase tracking-wide text-muted-foreground"
-                    >
-                      Password
-                    </label>
-                    <Input
-                      id="ctf-password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      type="password"
-                      placeholder="password"
-                      className="h-10"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={isImporting}
-                    className="mt-4 w-full gap-2 xl:mt-0"
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ctf-username"
+                    className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
                   >
-                    {isImporting ? (
-                      <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Upload className="size-4" aria-hidden="true" />
-                    )}
-                    Import CTF
-                  </Button>
+                    Username
+                  </label>
+                  <Input
+                    id="ctf-username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="teamname"
+                    className="h-10"
+                  />
                 </div>
-              </>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="ctf-password"
+                    className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
+                  >
+                    Password
+                  </label>
+                  <Input
+                    id="ctf-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    type="password"
+                    placeholder="password"
+                    className="h-10"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={isImporting}
+                  className="mt-4 w-full gap-2 xl:mt-0"
+                >
+                  {isImporting ? (
+                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Upload className="size-4" aria-hidden="true" />
+                  )}
+                  Import CTF
+                </Button>
+              </div>
             ) : (
               <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
                 <p className="text-sm text-muted-foreground">
@@ -436,12 +413,12 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
           </form>
 
           {importError ? (
-            <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {importError}
             </p>
           ) : null}
           {importMessage ? (
-            <p className="mt-4 rounded-md border border-primary/35 bg-primary/10 px-4 py-2 text-sm text-foreground">
+            <p className="mt-4 rounded-md border border-primary/35 bg-primary/10 px-4 py-3 text-sm text-foreground">
               {importMessage}
             </p>
           ) : null}
@@ -449,82 +426,93 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
       </Card>
 
       {error ? (
-        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
-      <main className="flex-1 pr-1">
+      <main className="flex-1">
         {!filtered.length ? (
-          <div className="mt-8 rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">
+          <div className="mt-8 rounded-lg border border-dashed border-border bg-card px-6 py-12 text-center text-sm text-muted-foreground">
             No challenges match your filter.
           </div>
         ) : (
-          <div className="space-y-6">
+          <Accordion type="multiple" defaultValue={groupedChallenges.map(([ctfName]) => ctfName)} className="w-full space-y-4">
             {groupedChallenges.map(([ctfName, ctfChallenges]) => (
-              <Card key={ctfName} className="border-border bg-card shadow-none">
-                <CardHeader className="space-y-2 pb-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-lg text-card-foreground">{ctfName}</CardTitle>
-                    <Badge variant="secondary" className="font-medium">
-                      {ctfChallenges.length}
+              <AccordionItem key={ctfName} value={ctfName} className="border border-border/60 rounded-xl bg-card shadow-sm overflow-hidden px-1">
+                <AccordionTrigger className="px-5 py-4 hover:bg-muted/30 transition-colors [&[data-state=open]]:border-b [&[data-state=open]]:border-border/60 hover:no-underline">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-semibold tracking-tight text-foreground">{ctfName}</span>
+                    <Badge variant="secondary" className="font-medium bg-muted text-muted-foreground hover:bg-muted/80">
+                      {ctfChallenges.length} {ctfChallenges.length === 1 ? "challenge" : "challenges"}
                     </Badge>
                   </div>
-                  <CardDescription>
-                    {ctfChallenges.length} challenge{ctfChallenges.length === 1 ? "" : "s"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                </AccordionTrigger>
+                <AccordionContent className="p-5 pt-3 bg-muted/5">
+                  <div className="flex flex-col gap-3">
                     {ctfChallenges.map((challenge) => {
                       const isStarting = pendingId === challenge.id;
                       const challengeBusy = isChallengeBusy(challenge.state);
+                      
                       return (
-                        <Card
+                        <div
                           key={challenge.id}
-                          className="flex flex-col rounded-lg border-border bg-background shadow-none"
+                          className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg border border-border bg-background hover:border-primary/40 transition-all shadow-sm group"
                         >
-                          <CardHeader className="space-y-3 pb-2">
-                            <CardTitle className="line-clamp-2 text-base text-card-foreground">
-                              {challenge.name}
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="flex-1 space-y-4">
-                            <p className="line-clamp-4 min-h-[5.2rem] text-sm text-muted-foreground">
-                              {challenge.description || "No description provided."}
-                            </p>
-                            <div className="space-y-1.5 text-xs text-muted-foreground">
-                              <p>Status: {formatChallengeState(challenge.state)}</p>
-                              <p>Category: {challenge.category || "uncategorized"}</p>
-                              <p>Value: {challenge.value || 0}</p>
-                              <p>Distfiles: {challenge.distfileCount}</p>
-                              <p>Started: {formatStartedAt(challenge.startedAt)}</p>
-                              {challenge.latestFlag ? <p>Flag: {challenge.latestFlag}</p> : null}
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-medium text-base text-foreground group-hover:text-primary transition-colors truncate">
+                                {challenge.name}
+                              </h3>
+                              <Badge variant="outline" className="text-xs bg-background">
+                                {challenge.value || 0} pts
+                              </Badge>
+                              {challenge.latestFlag ? (
+                                <Badge variant="default" className="bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-none font-mono text-xs hover:bg-emerald-500/25 transition-colors">
+                                  Captured
+                                </Badge>
+                              ) : null}
                             </div>
-                          </CardContent>
-                          <CardFooter className="pt-0 justify-end">
+                            <p className="text-sm text-muted-foreground line-clamp-1 group-hover:line-clamp-2 transition-all">
+                              {challenge.description || "No description available."}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground/80">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary/40 block shadow-[0_0_8px_rgba(var(--primary),0.5)]"></span>
+                                {challenge.category || "Uncategorized"}
+                              </span>
+                              <span>•</span>
+                              <span className="capitalize">{formatChallengeState(challenge.state).toLowerCase()}</span>
+                              <span>•</span>
+                              <span>{challenge.distfileCount} files</span>
+                            </div>
+                          </div>
+                          
+                          <div className="shrink-0 flex items-center md:justify-end">
                             <Button
                               type="button"
+                              size="sm"
+                              variant={challengeBusy ? "outline" : "default"}
                               onClick={() => handleStart(challenge.id)}
                               disabled={isStarting || isPending || challengeBusy}
-                              className="w-full sm:w-auto"
+                              className="w-full md:w-auto h-9 px-4 gap-2 shadow-sm font-medium"
                             >
                               {isStarting ? (
                                 <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                               ) : (
                                 <Play className="size-3.5" aria-hidden="true" />
                               )}
-                              {challengeBusy ? "Running" : "Solve"}
+                              {challengeBusy ? "Running" : "Run Solver"}
                             </Button>
-                          </CardFooter>
-                        </Card>
+                          </div>
+                        </div>
                       );
                     })}
-                  </div>
-                </CardContent>
-              </Card>
+                   </div>
+                </AccordionContent>
+              </AccordionItem>
             ))}
-          </div>
+          </Accordion>
         )}
       </main>
     </div>

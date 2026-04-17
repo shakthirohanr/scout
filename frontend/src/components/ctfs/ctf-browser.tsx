@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, RefreshCw, Search, Trash2 } from "lucide-react";
+import { FolderOpen, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -67,9 +67,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
   const [query, setQuery] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const [selectedCtfId, setSelectedCtfId] = useState<number | null>(
-    initialCtfs[0]?.id ?? null,
-  );
+  const [selectedCtfId, setSelectedCtfId] = useState<number | null>(null);
 
   const filteredSources = useMemo<SourceWithChallenges[]>(() => {
     const challengesByCtfId = new Map<number, ChallengeCatalogItem[]>();
@@ -85,6 +83,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
     const normalizedQuery = query.trim().toLowerCase();
 
     return ctfs
+      .filter((ctf) => ctf.baseUrl !== LOCAL_SOURCE_URL)
       .map((ctf) => {
         const sourceChallenges = [...(challengesByCtfId.get(ctf.id) ?? [])].sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
@@ -132,18 +131,13 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
   }, [ctfs, challenges, query]);
 
   useEffect(() => {
-    if (!filteredSources.length) {
+    if (selectedCtfId !== null && !filteredSources.some((ctf) => ctf.id === selectedCtfId)) {
       setSelectedCtfId(null);
-      return;
-    }
-
-    if (selectedCtfId === null || !filteredSources.some((ctf) => ctf.id === selectedCtfId)) {
-      setSelectedCtfId(filteredSources[0].id);
     }
   }, [filteredSources, selectedCtfId]);
 
   const selectedSource =
-    filteredSources.find((ctf) => ctf.id === selectedCtfId) ?? filteredSources[0] ?? null;
+    filteredSources.find((ctf) => ctf.id === selectedCtfId) ?? null;
 
   const sourceCount = ctfs.length;
   const challengeCount = challenges.length;
@@ -247,19 +241,8 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
     <div className="page-shell">
       <section
         aria-labelledby="ctf-browser-heading"
-        className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+        className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-end"
       >
-        <div className="space-y-2">
-          <h1
-            id="ctf-browser-heading"
-            className="text-3xl font-semibold tracking-tight text-foreground"
-          >
-            CTF Sources
-          </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Browse imported CTFs, inspect their challenge sets, and remove stale sources or individual imported challenges.
-          </p>
-        </div>
         <div className="w-full sm:w-96">
           <Input
             value={query}
@@ -396,9 +379,18 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
         <Card className="border-border bg-card shadow-none">
           <CardHeader className="space-y-3 pb-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1">
-                <CardTitle className="text-lg text-card-foreground">
+              <div className="space-y-1 w-full">
+                <CardTitle className="text-lg text-card-foreground flex items-center justify-between">
                   {selectedSource.name}
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-muted-foreground" 
+                    onClick={() => setSelectedCtfId(null)}
+                  >
+                    <X className="size-4" />
+                    <span className="sr-only">Close Inspect</span>
+                  </Button>
                 </CardTitle>
                 <CardDescription>
                   Review the current challenge set and delete stale imported challenges one at a time.
@@ -513,12 +505,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
             )}
           </CardContent>
         </Card>
-      ) : (
-        <div className="rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">
-          <FolderOpen className="mx-auto mb-3 size-5 text-muted-foreground" />
-          No CTF source is selected.
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
