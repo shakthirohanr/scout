@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,13 +13,14 @@ from backend.api.database import session_scope
 from backend.api.db_models import Challenge
 from backend.api.repositories.ctf_repository import (
     get_challenge_by_id,
+    get_ctf_source_with_challenges,
     get_or_create_ctf_source,
     list_challenges,
     list_ctf_sources,
     slugify,
     upsert_challenge,
 )
-from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES
+from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES, delete_runs_for_challenge
 from backend.api.services.mappers import challenge_to_dict, ctf_source_to_dict
 from backend.api.services.run_manager_service import RunManager
 from backend.api.utils import utcnow_iso
@@ -218,6 +220,111 @@ def delete_challenge_run_data(
         "challenge": challenge,
         "deleted_runs": result["deleted_runs"],
         "files_removed": result["files_removed"],
+        "generated_at": utcnow_iso(),
+    }
+
+
+def _remove_tree_if_allowed(path: Path, *, allowed_root: Path) -> bool:
+    resolved_path = path.expanduser().resolve()
+    resolved_root = allowed_root.expanduser().resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError:
+        return False
+
+    if not resolved_path.exists():
+        return False
+
+    shutil.rmtree(resolved_path, ignore_errors=True)
+    return not resolved_path.exists()
+
+
+def delete_challenge(
+    *,
+    challenge_id: str,
+    run_manager: RunManager,
+) -> dict[str, Any]:
+    run_manager.sync_runs()
+
+    with session_scope() as session:
+        challenge = get_challenge_by_id(session, challenge_id)
+        if challenge is None:
+            raise KeyError(challenge_id)
+        if challenge.state in ACTIVE_RUN_STATUSES:
+            raise RuntimeError("Challenge is still running. Kill it before deleting.")
+        if challenge.ctf_source.base_url == LOCAL_SOURCE_URL:
+            raise RuntimeError("Local challenges cannot be deleted from the UI.")
+
+        challenge_payload = challenge_to_dict(challenge)
+        challenge_name = challenge.name
+        challenge_path = Path(challenge.path)
+        ctf_root = Path(challenge.ctf_source.challenges_root).expanduser().resolve() / challenge.ctf_source.slug
+
+        with run_manager._lock:
+            for run_id, run in list(run_manager._runs.items()):
+                if run.challenge_id == challenge_id:
+                    run_manager._runs.pop(run_id, None)
+
+        runs = delete_runs_for_challenge(session, challenge_id)
+        session.delete(challenge)
+        session.flush()
+
+    files_removed = run_manager._delete_run_artifacts(runs, challenge_name=challenge_name)
+    directory_removed = _remove_tree_if_allowed(challenge_path, allowed_root=ctf_root)
+
+    return {
+        "challenge": challenge_payload,
+        "deleted_runs": len(runs),
+        "files_removed": files_removed,
+        "directory_removed": directory_removed,
+        "generated_at": utcnow_iso(),
+    }
+
+
+def delete_ctf(
+    *,
+    ctf_id: int,
+    run_manager: RunManager,
+) -> dict[str, Any]:
+    run_manager.sync_runs()
+
+    with session_scope() as session:
+        source = get_ctf_source_with_challenges(session, ctf_id)
+        if source is None:
+            raise KeyError(ctf_id)
+        if source.base_url == LOCAL_SOURCE_URL:
+            raise RuntimeError("The local challenge source cannot be deleted from the UI.")
+
+        challenges = list(source.challenges)
+        active_names = [challenge.name for challenge in challenges if challenge.state in ACTIVE_RUN_STATUSES]
+        if active_names:
+            raise RuntimeError("One or more challenges are still running. Kill them before deleting this CTF.")
+
+        source_payload = ctf_source_to_dict(source, challenge_count=len(challenges))
+        challenge_ids = {challenge.id for challenge in challenges}
+        runs = []
+        for challenge in challenges:
+            runs.extend(delete_runs_for_challenge(session, challenge.id))
+
+        with run_manager._lock:
+            for run_id, run in list(run_manager._runs.items()):
+                if run.challenge_id in challenge_ids:
+                    run_manager._runs.pop(run_id, None)
+
+        session.delete(source)
+        session.flush()
+
+    files_removed = run_manager._delete_run_artifacts(runs)
+    source_root = Path(str(source_payload["challenges_root"])).expanduser().resolve()
+    ctf_root = source_root / str(source_payload["slug"])
+    root_removed = _remove_tree_if_allowed(ctf_root, allowed_root=source_root)
+
+    return {
+        "ctf": source_payload,
+        "deleted_challenges": len(challenges),
+        "deleted_runs": len(runs),
+        "files_removed": files_removed,
+        "root_removed": root_removed,
         "generated_at": utcnow_iso(),
     }
 

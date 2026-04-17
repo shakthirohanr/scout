@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Home, ListChecks, Menu, PanelLeft, PanelLeftClose } from "lucide-react";
+import { FolderOpen, Home, ListChecks, Menu, PanelLeft, PanelLeftClose } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
@@ -87,12 +87,19 @@ export function SiteSidebar({
 
   const navItems = useMemo<NavItem[]>(() => {
     const challengesActive = pathname === "/challenges" || pathname.startsWith("/challenge/");
+    const ctfsActive = pathname === "/ctfs";
     return [
       {
         href: "/",
         label: "Home",
         icon: Home,
         active: pathname === "/",
+      },
+      {
+        href: "/ctfs",
+        label: "CTFs",
+        icon: FolderOpen,
+        active: ctfsActive,
       },
       {
         href: "/challenges",

@@ -10,6 +10,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -481,30 +482,14 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                       return (
                         <Card
                           key={challenge.id}
-                          className="rounded-lg border-border bg-background shadow-none"
+                          className="flex flex-col rounded-lg border-border bg-background shadow-none"
                         >
                           <CardHeader className="space-y-3 pb-2">
-                            <div className="flex items-start justify-between gap-3">
-                              <CardTitle className="line-clamp-2 text-base text-card-foreground">
-                                {challenge.name}
-                              </CardTitle>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="gap-1.5"
-                                onClick={() => handleStart(challenge.id)}
-                                disabled={isStarting || isPending || challengeBusy}
-                              >
-                                {isStarting ? (
-                                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
-                                ) : (
-                                  <Play className="size-3.5" aria-hidden="true" />
-                                )}
-                                {challengeBusy ? "Running" : "Solve"}
-                              </Button>
-                            </div>
+                            <CardTitle className="line-clamp-2 text-base text-card-foreground">
+                              {challenge.name}
+                            </CardTitle>
                           </CardHeader>
-                          <CardContent className="space-y-4">
+                          <CardContent className="flex-1 space-y-4">
                             <p className="line-clamp-4 min-h-[5.2rem] text-sm text-muted-foreground">
                               {challenge.description || "No description provided."}
                             </p>
@@ -517,6 +502,21 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                               {challenge.latestFlag ? <p>Flag: {challenge.latestFlag}</p> : null}
                             </div>
                           </CardContent>
+                          <CardFooter className="pt-0 justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => handleStart(challenge.id)}
+                              disabled={isStarting || isPending || challengeBusy}
+                              className="w-full sm:w-auto"
+                            >
+                              {isStarting ? (
+                                <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Play className="size-3.5" aria-hidden="true" />
+                              )}
+                              {challengeBusy ? "Running" : "Solve"}
+                            </Button>
+                          </CardFooter>
                         </Card>
                       );
                     })}

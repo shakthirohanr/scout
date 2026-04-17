@@ -11,7 +11,9 @@ from backend.api.database import session_scope
 from backend.api.repositories.ctf_repository import list_ctf_sources
 from backend.api.schemas import CTFImportRequest, StartChallengeRequest, SteerChallengeRequest
 from backend.api.services.catalog_service import (
+    delete_challenge as delete_challenge_entry,
     delete_challenge_run_data,
+    delete_ctf as delete_ctf_entry,
     get_catalog_payload,
     start_challenge_run,
     stop_challenge_run,
@@ -73,6 +75,19 @@ def kill_challenge(challenge_id: str) -> dict[str, Any]:
 @router.delete("/challenges/{challenge_id}")
 def delete_challenge(challenge_id: str) -> dict[str, Any]:
     try:
+        return delete_challenge_entry(
+            challenge_id=challenge_id,
+            run_manager=RUN_MANAGER,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Challenge not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/challenges/{challenge_id}/data")
+def delete_challenge_data(challenge_id: str) -> dict[str, Any]:
+    try:
         return delete_challenge_run_data(
             challenge_id=challenge_id,
             run_manager=RUN_MANAGER,
@@ -97,7 +112,7 @@ def steer_challenge(challenge_id: str, request: SteerChallengeRequest) -> dict[s
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    payload["generated_at"] = _utcnow_iso()
+    payload["generated_at"] = utcnow_iso()
     return payload
 
 
@@ -108,8 +123,21 @@ def list_ctfs() -> dict[str, Any]:
     return {
         "ctfs": sources,
         "count": len(sources),
-        "generated_at": _utcnow_iso(),
+        "generated_at": utcnow_iso(),
     }
+
+
+@router.delete("/ctfs/{ctf_id}")
+def remove_ctf(ctf_id: int) -> dict[str, Any]:
+    try:
+        return delete_ctf_entry(
+            ctf_id=ctf_id,
+            run_manager=RUN_MANAGER,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="CTF source not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/ctfs/import")

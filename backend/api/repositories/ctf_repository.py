@@ -51,6 +51,17 @@ def get_ctf_source(session: Session, ctf_id: int) -> CTFSource | None:
     return session.get(CTFSource, ctf_id)
 
 
+def get_ctf_source_with_challenges(session: Session, ctf_id: int) -> CTFSource | None:
+    stmt = (
+        select(CTFSource)
+        .options(
+            selectinload(CTFSource.challenges).selectinload(Challenge.runs),
+        )
+        .where(CTFSource.id == ctf_id)
+    )
+    return session.execute(stmt).unique().scalar_one_or_none()
+
+
 def get_or_create_ctf_source(
     session: Session,
     *,

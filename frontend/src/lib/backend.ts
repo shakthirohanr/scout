@@ -102,6 +102,16 @@ type BackendDeleteChallengeResponse = {
   challenge: BackendCatalogItem;
   deleted_runs: number;
   files_removed: number;
+  directory_removed: boolean;
+  generated_at: string;
+};
+
+type BackendDeleteCTFResponse = {
+  ctf: BackendCTFSourceSummary;
+  deleted_challenges: number;
+  deleted_runs: number;
+  files_removed: number;
+  root_removed: boolean;
   generated_at: string;
 };
 
@@ -272,6 +282,30 @@ export async function deleteChallengeData(
   challengeId: string,
 ): Promise<{ challenge: ChallengeCatalogItem; deletedRuns: number; filesRemoved: number }> {
   const payload = await fetchBackend<BackendDeleteChallengeResponse>(
+    `/api/v1/challenges/${encodeURIComponent(challengeId)}/data`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
+
+  return {
+    challenge: toCatalogItem(payload.challenge),
+    deletedRuns: payload.deleted_runs ?? 0,
+    filesRemoved: payload.files_removed ?? 0,
+  };
+}
+
+export async function deleteChallenge(
+  challengeId: string,
+): Promise<{
+  challenge: ChallengeCatalogItem;
+  deletedRuns: number;
+  filesRemoved: number;
+  directoryRemoved: boolean;
+}> {
+  const payload = await fetchBackend<BackendDeleteChallengeResponse>(
     `/api/v1/challenges/${encodeURIComponent(challengeId)}`,
     {
       method: "DELETE",
@@ -284,6 +318,35 @@ export async function deleteChallengeData(
     challenge: toCatalogItem(payload.challenge),
     deletedRuns: payload.deleted_runs ?? 0,
     filesRemoved: payload.files_removed ?? 0,
+    directoryRemoved: payload.directory_removed ?? false,
+  };
+}
+
+export async function deleteCTF(
+  ctfId: number,
+): Promise<{
+  ctf: CTFSourceSummary;
+  deletedChallenges: number;
+  deletedRuns: number;
+  filesRemoved: number;
+  rootRemoved: boolean;
+}> {
+  const payload = await fetchBackend<BackendDeleteCTFResponse>(
+    `/api/v1/ctfs/${ctfId}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  revalidateTag(CTF_SOURCES_TAG, "max");
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
+
+  return {
+    ctf: toCTFSource(payload.ctf),
+    deletedChallenges: payload.deleted_challenges ?? 0,
+    deletedRuns: payload.deleted_runs ?? 0,
+    filesRemoved: payload.files_removed ?? 0,
+    rootRemoved: payload.root_removed ?? false,
   };
 }
 
