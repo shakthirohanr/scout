@@ -1,36 +1,45 @@
-"""Persistent UI-facing run configuration and CLI command building."""
+"""Per-run solver configuration and CLI command building.
+
+SolverRunConfig holds per-run options submitted by the web UI (challenge dir,
+CTFd URL, model list, etc.).  It is distinct from Settings (infra/API config
+read from agent-config.yaml).
+"""
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.config import CONFIG_PATH, REPO_ROOT, Settings, get_settings, save_config
 from backend.models import default_models
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-UI_CONFIG_PATH = REPO_ROOT / ".ctf-agent-ui.json"
+BACKEND_DIR = REPO_ROOT / "backend"
+UI_CONFIG_PATH = CONFIG_PATH  # kept for import compat
 
 SolverMode = Literal["ctfd", "solve", "solve-local", "solve-dir"]
-CoordinatorBackend = Literal["kimi", "claude", "codex"]
+CoordinatorBackend = Literal["openai"]
 
 
 class SolverRunConfig(BaseModel):
+    """Per-run config supplied by the web UI."""
+
     mode: SolverMode = "solve"
-    challenge_dir: str = "./challenges/excellent-crypto-challenge"
+    challenge_dir: str = "."
     challenges_dir: str = "challenges"
     ctfd_url: str | None = None
     image: str = "ctf-sandbox"
     models: list[str] = Field(default_factory=default_models)
     no_submit: bool = True
     verbose: bool = False
-    coordinator: CoordinatorBackend = "kimi"
+    coordinator: CoordinatorBackend = "openai"
     coordinator_model: str | None = None
     max_challenges: int = 10
     msg_port: int = 0
+    openai_compatible_base_url: str = ""
+    openai_compatible_api_key: str = ""
 
     @field_validator("models")
     @classmethod
@@ -60,26 +69,26 @@ class SolverRunConfig(BaseModel):
 
 
 def load_ui_config() -> SolverRunConfig:
-    if not UI_CONFIG_PATH.exists():
-        return SolverRunConfig()
-    try:
-        return SolverRunConfig.model_validate(json.loads(UI_CONFIG_PATH.read_text(encoding="utf-8")))
-    except Exception:
-        return SolverRunConfig()
+    """Return defaults; the web UI always supplies its own config on start."""
+    return SolverRunConfig()
 
 
 def save_ui_config(config: SolverRunConfig) -> SolverRunConfig:
-    UI_CONFIG_PATH.write_text(
-        json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    # Persist OpenAI credentials from a UI-submitted run back into agent-config.yaml
+    if config.openai_compatible_base_url or config.openai_compatible_api_key:
+        settings = get_settings()
+        if config.openai_compatible_base_url:
+            settings.openai_compatible_base_url = config.openai_compatible_base_url
+        if config.openai_compatible_api_key:
+            settings.openai_compatible_api_key = config.openai_compatible_api_key
+        save_config(settings)
     return config
 
 
 def project_python_executable() -> str:
     venv_candidates = [
-        REPO_ROOT / "backend" / ".venv" / "bin" / "python",
         REPO_ROOT / ".venv" / "bin" / "python",
+        BACKEND_DIR / ".venv" / "bin" / "python",
     ]
     for venv_python in venv_candidates:
         if venv_python.exists():
@@ -101,41 +110,26 @@ def resolve_workdir(config: SolverRunConfig) -> str:
 
 
 def build_cli_command(config: SolverRunConfig, ctfd_url_override: str | None = None) -> list[str]:
+    """Build the subprocess command for a solver run (no CLI options — all via YAML)."""
     python_exe = project_python_executable()
-    cmd = [python_exe, "-m", "backend.cli"]
+    # Write per-run overrides into the config file so the subprocess picks them up
+    settings = get_settings()
+    if config.models:
+        settings.models = config.models
+    if config.no_submit is not None:
+        settings.no_submit = config.no_submit
+    if config.verbose is not None:
+        settings.verbose = config.verbose
+    if config.max_challenges:
+        settings.max_concurrent_challenges = config.max_challenges
+    if config.coordinator_model:
+        settings.coordinator_model = config.coordinator_model
+    if config.msg_port:
+        settings.msg_port = config.msg_port
+    if config.openai_compatible_base_url:
+        settings.openai_compatible_base_url = config.openai_compatible_base_url
+    if config.openai_compatible_api_key:
+        settings.openai_compatible_api_key = config.openai_compatible_api_key
+    save_config(settings)
 
-    if config.mode == "ctfd":
-        cmd += [
-            "run",
-            "--challenges-dir",
-            config.challenges_dir,
-            "--coordinator",
-            config.coordinator,
-            "--max-challenges",
-            str(config.max_challenges),
-            "--msg-port",
-            str(config.msg_port),
-        ]
-        ctfd_url = ctfd_url_override or config.ctfd_url
-        if ctfd_url:
-            cmd += ["--ctfd-url", ctfd_url]
-        if config.coordinator_model:
-            cmd += ["--coordinator-model", config.coordinator_model]
-    elif config.mode == "solve":
-        cmd += ["solve", config.challenge_dir]
-    elif config.mode == "solve-local":
-        cmd += ["solve-local"]
-    elif config.mode == "solve-dir":
-        cmd += ["solve-dir", config.challenges_dir]
-    else:
-        raise ValueError(f"Unknown mode: {config.mode}")
-
-    if config.image:
-        cmd += ["--image", config.image]
-    for model in config.models:
-        cmd += ["--models", model]
-    if config.no_submit:
-        cmd.append("--no-submit")
-    if config.verbose:
-        cmd.append("-v")
-    return cmd
+    return [python_exe, "-m", "backend.cli", "run"]

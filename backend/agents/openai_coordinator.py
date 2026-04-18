@@ -1,4 +1,4 @@
-"""Kimi coordinator — uses a Pydantic AI model with the shared event loop."""
+"""OpenAI coordinator — uses a Pydantic AI model with the shared event loop."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def _build_coordinator_toolset(deps: CoordinatorDeps) -> FunctionToolset[Coordin
     )
 
 
-async def run_kimi_coordinator(
+async def run_openai_coordinator(
     settings: Settings,
     model_specs: list[str] | None = None,
     challenges_root: str = "challenges",
@@ -113,15 +113,15 @@ async def run_kimi_coordinator(
     coordinator_model: str | None = None,
     msg_port: int = 0,
 ) -> dict[str, Any]:
-    """Run a Kimi-based coordinator with the shared event loop."""
+    """Run an OpenAI-based coordinator with the shared event loop."""
     ctfd, cost_tracker, deps = build_deps(
         settings, model_specs, challenges_root, no_submit,
     )
     deps.msg_port = msg_port
 
-    model_spec = coordinator_model or "kimi/kimi-k2p5-turbo"
+    model_spec = coordinator_model or "openai-compatible/gpt-4o"
     if "/" not in model_spec:
-        model_spec = f"kimi/{model_spec}"
+        model_spec = f"openai-compatible/{model_spec}"
 
     model = resolve_model(model_spec, settings)
     model_settings = resolve_model_settings(model_spec)
@@ -151,8 +151,8 @@ async def run_kimi_coordinator(
 
         output = getattr(result, "output", "")
         if isinstance(output, str) and output.strip():
-            logger.info("Kimi coordinator output: %s", output[:500])
+            logger.info("OpenAI coordinator output: %s", output[:500])
 
-        logger.info("Kimi coordinator turn done (messages=%d)", len(history or []))
+        logger.info("OpenAI coordinator turn done (messages=%d)", len(history or []))
 
     return await run_event_loop(deps, ctfd, cost_tracker, turn_fn)

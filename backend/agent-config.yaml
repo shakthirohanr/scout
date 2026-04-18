@@ -1,0 +1,19 @@
+models:
+- openai-compatible/glm-5p1-fast
+no_submit: true
+verbose: false
+coordinator: openai
+coordinator_model: null
+max_challenges: 10
+msg_port: 0
+api_host: 127.0.0.1
+api_port: 8081
+openai_compatible_base_url: https://api.llms.of.achyuth.dev/
+openai_compatible_api_key: sk-fglrwjcRASrZZccbOgKmLw
+default_solver_model: openai-compatible/glm-5p1-fast
+postgres_url: postgresql://postgres:postgres@127.0.0.1:5432/cryptoagent
+database_url: postgresql://postgres:postgres@127.0.0.1:5432/cryptoagent
+sandbox_image: ctf-sandbox
+max_concurrent_challenges: 10
+max_attempts_per_challenge: 3
+container_memory_limit: 16g

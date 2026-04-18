@@ -13,6 +13,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
+from pydantic_ai.usage import RunUsage
 
 from backend.config import Settings
 from backend.cost_tracker import CostTracker
@@ -55,13 +56,26 @@ class TracingToolset(WrapperToolset[SolverDeps]):
     tracer: SolverTracer = field(repr=False)
     loop_detector: LoopDetector = field(repr=False)
     step_counter: list[int] = field(repr=False)
-    agent_name: str = field(default="agent", repr=False)
+    agent_name: str = field(repr=False)
+    last_usage_ref: list[RunUsage] = field(repr=False)
+    record_usage_cb: Any = field(repr=False)
 
     async def call_tool(
         self, name: str, tool_args: dict[str, Any], ctx: RunContext[SolverDeps], tool: ToolsetTool[SolverDeps]
     ) -> Any:
         self.step_counter[0] += 1
         step = self.step_counter[0]
+
+        current_usage = ctx.usage
+        last_usage = self.last_usage_ref[0]
+        usage_diff = RunUsage(
+            input_tokens=max(0, current_usage.input_tokens - last_usage.input_tokens),
+            output_tokens=max(0, current_usage.output_tokens - last_usage.output_tokens),
+            cache_read_tokens=max(0, current_usage.cache_read_tokens - last_usage.cache_read_tokens),
+        )
+        if usage_diff.has_values():
+            self.record_usage_cb(usage_diff)
+        self.last_usage_ref[0] = current_usage
 
         args_str = str(tool_args)
         if len(args_str) > 100:
@@ -164,6 +178,8 @@ class Solver:
         self._agent: Agent[SolverDeps, FlagFound] | None = None
         self._messages: list = []
         self._step_count = [0]  # mutable ref shared with TracingToolset
+        self._last_usage = [RunUsage()]
+        self._last_duration_update = [0.0]
         self._flag: str | None = None
         self._confirmed: bool = False
         self._findings: str = ""
@@ -188,12 +204,36 @@ class Solver:
         model = resolve_model(self.model_spec, self.settings)
         model_settings = resolve_model_settings(self.model_spec)
         raw_toolset = _build_toolset(self.deps)
+
+        def _record_realtime_usage(usage_diff: RunUsage):
+            now = time.monotonic()
+            duration_diff = 0.0
+            if self._last_duration_update[0] > 0:
+                duration_diff = max(0.0, now - self._last_duration_update[0])
+            self._last_duration_update[0] = now
+            
+            self.cost_tracker.record(
+                self.agent_name, usage_diff, self.model_id,
+                provider_spec=provider_from_spec(self.model_spec),
+                duration_seconds=duration_diff,
+            )
+            agent_usage = self.cost_tracker.by_agent.get(self.agent_name)
+            if agent_usage:
+                self.tracer.usage(
+                    agent_usage.usage.input_tokens,
+                    agent_usage.usage.output_tokens,
+                    agent_usage.usage.cache_read_tokens,
+                    agent_usage.cost_usd,
+                )
+
         toolset = TracingToolset(
             wrapped=raw_toolset,
             tracer=self.tracer,
             loop_detector=self.loop_detector,
             step_counter=self._step_count,
             agent_name=self.agent_name,
+            last_usage_ref=self._last_usage,
+            record_usage_cb=_record_realtime_usage
         )
 
         self._agent = Agent(
@@ -217,6 +257,8 @@ class Solver:
         t0 = time.monotonic()
         steps_before = self._step_count[0]
 
+        self._last_duration_update[0] = time.monotonic()
+
         try:
             from pydantic_ai.usage import UsageLimits
             logger.info("[%s] Agent requesting model...", self.agent_name)
@@ -227,21 +269,35 @@ class Solver:
                 usage_limits=UsageLimits(request_limit=None),
             )
 
-            duration = time.monotonic() - t0
-            usage = result.usage()
-
-            self.cost_tracker.record(
-                self.agent_name, usage, self.model_id,
-                provider_spec=provider_from_spec(self.model_spec),
-                duration_seconds=duration,
+            final_usage = result.usage()
+            last_usage = self._last_usage[0]
+            usage_diff = RunUsage(
+                input_tokens=max(0, final_usage.input_tokens - last_usage.input_tokens),
+                output_tokens=max(0, final_usage.output_tokens - last_usage.output_tokens),
+                cache_read_tokens=max(0, final_usage.cache_read_tokens - last_usage.cache_read_tokens),
             )
+            
+            now = time.monotonic()
+            duration_diff = 0.0
+            if self._last_duration_update[0] > 0:
+                duration_diff = max(0.0, now - self._last_duration_update[0])
+            self._last_duration_update[0] = 0.0
+            
+            self.cost_tracker.record(
+                self.agent_name, usage_diff, self.model_id,
+                provider_spec=provider_from_spec(self.model_spec),
+                duration_seconds=duration_diff,
+            )
+            self._last_usage[0] = final_usage
 
             agent_usage = self.cost_tracker.by_agent.get(self.agent_name)
-            self.tracer.usage(
-                usage.input_tokens, usage.output_tokens,
-                usage.cache_read_tokens,
-                agent_usage.cost_usd if agent_usage else 0.0,
-            )
+            if agent_usage:
+                self.tracer.usage(
+                    agent_usage.usage.input_tokens,
+                    agent_usage.usage.output_tokens,
+                    agent_usage.usage.cache_read_tokens,
+                    agent_usage.cost_usd,
+                )
 
             self._messages = result.all_messages()
 

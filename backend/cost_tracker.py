@@ -18,6 +18,8 @@ PROVIDER_MAP: dict[str, str] = {
     "bedrock": "anthropic",
     "claude-sdk": "anthropic",
     "azure": "openai",
+    "generic-openai": "openai",
+    "openai-compatible": "openai",
     "zen": "openai",
     "codex": "openai",
     "google": "google",
@@ -97,6 +99,11 @@ def calc_cost(usage: RunUsage, model_name: str, provider_spec: str = "") -> floa
 
     logger.warning("Could not calculate cost for %s", model_name)
     return 0.0
+
+
+def calculate_usage_cost(usage: RunUsage, model_name: str, provider_spec: str = "") -> float:
+    """Backward-compatible alias for cost calculation."""
+    return calc_cost(usage, model_name, provider_spec)
 
 
 def _fmt_tokens(n: int) -> str:

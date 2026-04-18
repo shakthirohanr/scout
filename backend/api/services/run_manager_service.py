@@ -463,13 +463,9 @@ class RunManager:
             if not challenges_dir.exists():
                 raise ValueError(f"Challenges directory not found: {challenges_dir}")
         elif config.mode == "ctfd":
-            ctfd_url = config.ctfd_url or settings.ctfd_url
+            ctfd_url = config.ctfd_url
             if not ctfd_url:
-                raise ValueError("ctfd mode requires ctfd_url in config or environment")
-            if not settings.ctfd_token and not (settings.ctfd_user and settings.ctfd_pass):
-                raise ValueError(
-                    "ctfd mode requires CTFD_TOKEN or CTFD_USER/CTFD_PASS in environment"
-                )
+                raise ValueError("ctfd mode requires ctfd_url")
 
     def start(
         self,
@@ -484,7 +480,7 @@ class RunManager:
         steering_log_path = logs_directory() / f"steer-{run_id}.jsonl"
         output_log_path.parent.mkdir(parents=True, exist_ok=True)
         steering_log_path.touch(exist_ok=True)
-        command = build_cli_command(config, ctfd_url_override=settings.ctfd_url or config.ctfd_url)
+        command = build_cli_command(config, ctfd_url_override=config.ctfd_url)
         workdir = resolve_workdir(config)
         trace_ids_before = self._current_trace_ids()
 
@@ -492,6 +488,12 @@ class RunManager:
         process_env["CTF_AGENT_STEERING_FILE"] = str(steering_log_path)
         if challenge_id:
             process_env["CTF_AGENT_CHALLENGE_ID"] = challenge_id
+        if config.openai_compatible_base_url:
+            process_env["OPENAI_COMPATIBLE_BASE_URL"] = config.openai_compatible_base_url
+            process_env["GENERIC_OPENAI_BASE_URL"] = config.openai_compatible_base_url
+        if config.openai_compatible_api_key:
+            process_env["OPENAI_COMPATIBLE_API_KEY"] = config.openai_compatible_api_key
+            process_env["GENERIC_OPENAI_API_KEY"] = config.openai_compatible_api_key
 
         output_handle = open(output_log_path, "a", encoding="utf-8")
         try:
