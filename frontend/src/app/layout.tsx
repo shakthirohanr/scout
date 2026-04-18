@@ -35,7 +35,7 @@ export default async function RootLayout({
   try {
     const catalog = await getChallengeCatalog();
     runningChallenges = catalog.filter(
-      (c) => c.state === "starting" || c.state === "running"
+      (c) => c.state === "starting" || c.state === "running",
     );
   } catch {}
 

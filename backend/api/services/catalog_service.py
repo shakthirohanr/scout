@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,16 +21,14 @@ from backend.api.repositories.ctf_repository import (
 )
 from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES, delete_runs_for_challenge
 from backend.api.services.mappers import challenge_to_dict, ctf_source_to_dict
-from backend.api.services.run_manager_service import RunManager
 from backend.api.utils import utcnow_iso
-from backend.config import Settings
+from backend.config import get_settings
 from backend.local_challenges import list_local_challenges
-from backend.run_config import SolverRunConfig, load_ui_config
+from backend.orchestrator.orchestrator import AgentOrchestrator
+from backend.run_config import load_ui_config
 
 LOCAL_SOURCE_NAME = "Local Challenges"
 LOCAL_SOURCE_URL = "local://filesystem"
-
-
 
 
 def _is_under_any(path: Path, roots: list[Path]) -> bool:
@@ -72,10 +69,7 @@ def sync_local_catalog(challenges_root: str) -> None:
             challenges_root=str(root),
         )
 
-        valid_local_paths = {
-            str(Path(item.path).expanduser().resolve())
-            for item in local_items
-        }
+        valid_local_paths = {str(Path(item.path).expanduser().resolve()) for item in local_items}
         if valid_local_paths:
             session.execute(
                 delete(Challenge).where(
@@ -109,11 +103,11 @@ def get_catalog_payload(
     challenges_root: str,
     *,
     ctf_id: int | None = None,
-    run_manager: RunManager | None = None,
+    orchestrator: AgentOrchestrator | None = None,
 ) -> dict[str, Any]:
     sync_local_catalog(challenges_root)
-    if run_manager is not None:
-        run_manager.sync_runs()
+    if orchestrator is not None:
+        orchestrator.sync_runs()
 
     with session_scope() as session:
         sources_with_counts = list_ctf_sources(session)
@@ -131,15 +125,16 @@ def get_catalog_payload(
         }
 
 
-def start_challenge_run(
+async def start_challenge_run(
     *,
     challenge_id: str,
     launch_solver: bool,
-    run_manager: RunManager,
+    agent_count: int = 1,
+    orchestrator: AgentOrchestrator = None,
 ) -> dict[str, Any]:
-    settings = Settings()
+    settings = get_settings()
     config = load_ui_config()
-    run_manager.sync_runs()
+    orchestrator.sync_runs()
 
     with session_scope() as session:
         challenge = get_challenge_by_id(session, challenge_id)
@@ -149,45 +144,40 @@ def start_challenge_run(
             raise RuntimeError("Challenge is already running. Kill it before starting again.")
         challenge_payload = challenge_to_dict(challenge)
 
-    run_snapshot = None
+    run_snapshots = []
     if launch_solver:
-        run_config = SolverRunConfig(
-            mode="solve",
+        model_specs = config.models or [settings.default_solver_model]
+        run_snapshots = await orchestrator.spawn(
+            challenge_id=challenge_id,
             challenge_dir=str(challenge_payload["path"]),
-            challenges_dir=config.challenges_dir,
-            ctfd_url=config.ctfd_url,
-            image=config.image,
-            models=config.models,
+            challenge_name=challenge_payload["name"],
+            model_specs=model_specs,
+            agent_count=max(1, agent_count),
+            settings=settings,
             no_submit=config.no_submit,
-            verbose=config.verbose,
-            coordinator=config.coordinator,
-            coordinator_model=config.coordinator_model,
-            max_challenges=config.max_challenges,
-            msg_port=config.msg_port,
         )
-        run_snapshot = run_manager.start(run_config, settings, challenge_id=challenge_id)
         challenge_payload = get_challenge_or_none(challenge_id) or challenge_payload
 
     return {
         "challenge": challenge_payload,
-        "run": run_snapshot,
+        "runs": run_snapshots,
         "generated_at": utcnow_iso(),
     }
 
 
-def stop_challenge_run(
+async def stop_challenge_run(
     *,
     challenge_id: str,
-    run_manager: RunManager,
+    orchestrator: AgentOrchestrator,
 ) -> dict[str, Any]:
-    run_manager.sync_runs()
+    orchestrator.sync_runs()
     with session_scope() as session:
         challenge = get_challenge_by_id(session, challenge_id)
         if challenge is None:
             raise KeyError(challenge_id)
         challenge_payload = challenge_to_dict(challenge)
 
-    termination = run_manager.terminate_challenge(
+    termination = await orchestrator.kill_challenge(
         challenge_id=challenge_id,
         challenge_path=str(challenge_payload["path"]),
     )
@@ -200,18 +190,15 @@ def stop_challenge_run(
     }
 
 
-def delete_challenge_run_data(
+async def delete_challenge_run_data(
     *,
     challenge_id: str,
-    run_manager: RunManager,
+    orchestrator: AgentOrchestrator,
 ) -> dict[str, Any]:
-    run_manager.sync_runs()
-    result = run_manager.delete_challenge_data(challenge_id)
+    result = await orchestrator.delete_challenge_data(challenge_id)
     challenge_payload = get_challenge_or_none(challenge_id)
     challenge = challenge_payload or (
-        challenge_to_dict(result["challenge"])
-        if result["challenge"] is not None
-        else None
+        challenge_to_dict(result["challenge"]) if result["challenge"] is not None else None
     )
     if challenge is None:
         raise KeyError(challenge_id)
@@ -242,9 +229,9 @@ def _remove_tree_if_allowed(path: Path, *, allowed_root: Path) -> bool:
 def delete_challenge(
     *,
     challenge_id: str,
-    run_manager: RunManager,
+    orchestrator: AgentOrchestrator,
 ) -> dict[str, Any]:
-    run_manager.sync_runs()
+    orchestrator.sync_runs()
 
     with session_scope() as session:
         challenge = get_challenge_by_id(session, challenge_id)
@@ -258,18 +245,16 @@ def delete_challenge(
         challenge_payload = challenge_to_dict(challenge)
         challenge_name = challenge.name
         challenge_path = Path(challenge.path)
-        ctf_root = Path(challenge.ctf_source.challenges_root).expanduser().resolve() / challenge.ctf_source.slug
-
-        with run_manager._lock:
-            for run_id, run in list(run_manager._runs.items()):
-                if run.challenge_id == challenge_id:
-                    run_manager._runs.pop(run_id, None)
+        ctf_root = (
+            Path(challenge.ctf_source.challenges_root).expanduser().resolve()
+            / challenge.ctf_source.slug
+        )
 
         runs = delete_runs_for_challenge(session, challenge_id)
         session.delete(challenge)
         session.flush()
 
-    files_removed = run_manager._delete_run_artifacts(runs, challenge_name=challenge_name)
+    files_removed = AgentOrchestrator._delete_run_artifacts(runs, challenge_name=challenge_name)
     directory_removed = _remove_tree_if_allowed(challenge_path, allowed_root=ctf_root)
 
     return {
@@ -284,9 +269,9 @@ def delete_challenge(
 def delete_ctf(
     *,
     ctf_id: int,
-    run_manager: RunManager,
+    orchestrator: AgentOrchestrator,
 ) -> dict[str, Any]:
-    run_manager.sync_runs()
+    orchestrator.sync_runs()
 
     with session_scope() as session:
         source = get_ctf_source_with_challenges(session, ctf_id)
@@ -296,25 +281,21 @@ def delete_ctf(
             raise RuntimeError("The local challenge source cannot be deleted from the UI.")
 
         challenges = list(source.challenges)
-        active_names = [challenge.name for challenge in challenges if challenge.state in ACTIVE_RUN_STATUSES]
+        active_names = [ch.name for ch in challenges if ch.state in ACTIVE_RUN_STATUSES]
         if active_names:
-            raise RuntimeError("One or more challenges are still running. Kill them before deleting this CTF.")
+            raise RuntimeError(
+                "One or more challenges are still running. Kill them before deleting this CTF."
+            )
 
         source_payload = ctf_source_to_dict(source, challenge_count=len(challenges))
-        challenge_ids = {challenge.id for challenge in challenges}
         runs = []
-        for challenge in challenges:
-            runs.extend(delete_runs_for_challenge(session, challenge.id))
-
-        with run_manager._lock:
-            for run_id, run in list(run_manager._runs.items()):
-                if run.challenge_id in challenge_ids:
-                    run_manager._runs.pop(run_id, None)
+        for ch in challenges:
+            runs.extend(delete_runs_for_challenge(session, ch.id))
 
         session.delete(source)
         session.flush()
 
-    files_removed = run_manager._delete_run_artifacts(runs)
+    files_removed = AgentOrchestrator._delete_run_artifacts(runs)
     source_root = Path(str(source_payload["challenges_root"])).expanduser().resolve()
     ctf_root = source_root / str(source_payload["slug"])
     root_removed = _remove_tree_if_allowed(ctf_root, allowed_root=source_root)

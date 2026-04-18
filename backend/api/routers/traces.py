@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.utils import utcnow_iso
 from backend.log_reader import get_trace_detail, list_trace_summaries, logs_directory
-
 
 router = APIRouter(prefix="/api/v1", tags=["traces"])
 

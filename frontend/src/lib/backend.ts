@@ -84,7 +84,7 @@ type BackendCTFImportResponse = {
 
 type BackendStartChallengeResponse = {
   challenge: BackendCatalogItem;
-  run: Record<string, unknown> | null;
+  runs: Record<string, unknown>[];
   generated_at: string;
 };
 
@@ -242,12 +242,14 @@ export async function importCTF(input: ImportCTFInput): Promise<{
 
 export async function startChallenge(
   challengeId: string,
-): Promise<{ challenge: ChallengeCatalogItem; run: Record<string, unknown> | null }> {
+  agentCount = 1,
+): Promise<{ challenge: ChallengeCatalogItem; runs: Record<string, unknown>[] }> {
   const payload = await fetchBackend<BackendStartChallengeResponse>("/api/v1/challenges/start", {
     method: "POST",
     body: JSON.stringify({
       challenge_id: challengeId,
       launch_solver: true,
+      agent_count: agentCount,
     }),
   });
 
@@ -255,7 +257,7 @@ export async function startChallenge(
 
   return {
     challenge: toCatalogItem(payload.challenge),
-    run: payload.run ?? null,
+    runs: payload.runs ?? [],
   };
 }
 

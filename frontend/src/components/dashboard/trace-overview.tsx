@@ -9,25 +9,16 @@ type TraceOverviewProps = {
 };
 
 function formatDate(date: string | null): string {
-  if (!date) {
-    return "Not available";
-  }
-
+  if (!date) return "N/A";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(date));
 }
 
-function StatRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border border-border/60 bg-background/50 px-3 py-2">
+    <div className="flex items-center justify-between gap-3 border border-border bg-background px-3 py-2">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-xs font-medium text-foreground">{value}</span>
     </div>
@@ -37,7 +28,7 @@ function StatRow({
 export function TraceOverview({ trace, detail }: TraceOverviewProps) {
   if (!trace) {
     return (
-      <Card className="rounded-none border-border/60 bg-card shadow-none">
+      <Card>
         <CardContent className="p-4 text-sm text-muted-foreground">
           Select a trace to inspect the run summary and token usage.
         </CardContent>
@@ -48,20 +39,16 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
   return (
     <Tabs
       defaultValue="summary"
-      className="rounded-none border border-border/60 bg-card p-4 shadow-none"
+      className="rounded-lg border border-border bg-card p-4"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
-        <CardTitle className="text-base font-semibold text-foreground">Trace details</CardTitle>
+        <CardTitle className="text-sm font-medium text-foreground">Trace details</CardTitle>
         <StatusBadge status={trace.status} />
       </div>
 
-      <TabsList className="mb-3 grid w-full grid-cols-2 rounded-none">
-        <TabsTrigger value="summary" className="rounded-none text-sm">
-          Summary
-        </TabsTrigger>
-        <TabsTrigger value="usage" className="rounded-none text-sm">
-          Usage
-        </TabsTrigger>
+      <TabsList className="mb-3 grid w-full grid-cols-2">
+        <TabsTrigger value="summary" className="text-sm">Summary</TabsTrigger>
+        <TabsTrigger value="usage" className="text-sm">Usage</TabsTrigger>
       </TabsList>
 
       <TabsContent value="summary" className="space-y-2">
@@ -75,21 +62,21 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
         </div>
 
         <div className="grid gap-2 md:grid-cols-3">
-          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+          <div className="border border-border bg-background p-3">
             <p className="text-xs text-muted-foreground">Trace file</p>
-            <p className="mt-1 line-clamp-2 break-all text-xs font-medium text-foreground">
+            <p className="mt-0.5 line-clamp-2 break-all text-xs font-medium text-foreground">
               {trace.fileName}
             </p>
           </div>
-          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+          <div className="border border-border bg-background p-3">
             <p className="text-xs text-muted-foreground">Latest preview</p>
-            <p className="mt-1 line-clamp-3 break-all text-xs leading-5 text-foreground">
+            <p className="mt-0.5 line-clamp-3 break-all text-xs leading-5 text-foreground">
               {trace.preview}
             </p>
           </div>
-          <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+          <div className="border border-border bg-background p-3">
             <p className="text-xs text-muted-foreground">Flag</p>
-            <p className="mt-1 line-clamp-2 break-all text-xs font-medium text-foreground">
+            <p className="mt-0.5 line-clamp-2 break-all text-xs font-medium text-foreground">
               {trace.flag ?? "No confirmed flag recorded"}
             </p>
           </div>
@@ -107,15 +94,15 @@ export function TraceOverview({ trace, detail }: TraceOverviewProps) {
           <StatRow label="Estimated cost" value={`$${trace.costUsd.toFixed(2)}`} />
         </div>
 
-        <div className="border border-border/60 bg-[#e7eddc] p-3 dark:bg-background/40">
+        <div className="border border-border bg-background p-3">
           <CardHeader className="p-0">
-            <CardTitle className="text-sm font-medium text-foreground">Runtime health</CardTitle>
+            <CardTitle className="text-xs font-medium text-foreground">Runtime health</CardTitle>
           </CardHeader>
-          {detail ? (
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {detail && (
+            <p className="mt-1 text-xs text-muted-foreground">
               {detail.events.length} parsed events
             </p>
-          ) : null}
+          )}
         </div>
       </TabsContent>
     </Tabs>

@@ -127,11 +127,16 @@ async def cleanup_challenge_containers(challenge_dir: str) -> int:
                     if isinstance(mount, dict)
                 ]
 
-                has_challenge_mount = any(
-                    bind.startswith(f"{metadata_path}:") or bind.startswith(f"{distfiles_path}:")
-                    for bind in binds
-                    if isinstance(bind, str)
-                ) or metadata_path in mount_sources or distfiles_path in mount_sources
+                has_challenge_mount = (
+                    any(
+                        bind.startswith(f"{metadata_path}:")
+                        or bind.startswith(f"{distfiles_path}:")
+                        for bind in binds
+                        if isinstance(bind, str)
+                    )
+                    or metadata_path in mount_sources
+                    or distfiles_path in mount_sources
+                )
 
                 if not has_challenge_mount:
                     continue
@@ -185,7 +190,7 @@ class DockerSandbox:
             if s.endswith("m"):
                 return int(s[:-1]) * 1024 * 1024
             return int(s)
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             logger.warning("Invalid memory_limit %r, defaulting to 4GB", self.memory_limit)
             return 4 * 1024 * 1024 * 1024
 
@@ -201,10 +206,13 @@ class DockerSandbox:
             meta_yml = str(challenge_root / "metadata.yml")
 
             binds: list[str] = [f"{self.workspace_dir}:/challenge/workspace:rw"]
+            challenge_root_str = str(challenge_root)
             if Path(distfiles).exists():
                 binds.append(f"{distfiles}:/challenge/distfiles:ro")
             if Path(meta_yml).exists():
                 binds.append(f"{meta_yml}:/challenge/metadata.yml:ro")
+            if Path(challenge_root_str).exists():
+                binds.append(f"{challenge_root_str}:/challenge/challenge:ro")
 
             config = {
                 "Image": self.image,
@@ -220,7 +228,13 @@ class DockerSandbox:
                     "ExtraHosts": ["host.docker.internal:host-gateway"],
                     "CapAdd": ["SYS_ADMIN", "SYS_PTRACE"],
                     "SecurityOpt": ["seccomp=unconfined"],
-                    "Devices": [{"PathOnHost": "/dev/loop-control", "PathInContainer": "/dev/loop-control", "CgroupPermissions": "rwm"}],
+                    "Devices": [
+                        {
+                            "PathOnHost": "/dev/loop-control",
+                            "PathInContainer": "/dev/loop-control",
+                            "CgroupPermissions": "rwm",
+                        }
+                    ],
                     "Memory": self._parse_memory_limit(),
                     "NanoCpus": int(2 * 1e9),
                 },
@@ -380,6 +394,7 @@ class DockerSandbox:
 
         if self.workspace_dir:
             import shutil
+
             with contextlib.suppress(Exception):
                 shutil.rmtree(self.workspace_dir, ignore_errors=True)
             self.workspace_dir = ""

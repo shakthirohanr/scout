@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { RefreshCw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -22,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChallengeCatalogItem, CTFSourceSummary } from "@/lib/types";
 
@@ -43,10 +43,7 @@ type Notice = {
 const LOCAL_SOURCE_URL = "local://filesystem";
 
 function formatDate(value: string | null): string {
-  if (!value) {
-    return "Not available";
-  }
-
+  if (!value) return "N/A";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -90,11 +87,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
         );
 
         if (!normalizedQuery) {
-          return {
-            ...ctf,
-            challenges: sourceChallenges,
-            visibleChallenges: sourceChallenges,
-          };
+          return { ...ctf, challenges: sourceChallenges, visibleChallenges: sourceChallenges };
         }
 
         const visibleChallenges = sourceChallenges.filter((challenge) => {
@@ -105,28 +98,16 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
           );
         });
 
-        return {
-          ...ctf,
-          challenges: sourceChallenges,
-          visibleChallenges,
-        };
+        return { ...ctf, challenges: sourceChallenges, visibleChallenges };
       })
       .filter((ctf) => {
-        if (!normalizedQuery) {
-          return true;
-        }
-
+        if (!normalizedQuery) return true;
         const sourceMatch =
           ctf.name.toLowerCase().includes(normalizedQuery) ||
           ctf.slug.toLowerCase().includes(normalizedQuery) ||
           ctf.baseUrl.toLowerCase().includes(normalizedQuery) ||
           ctf.challengesRoot.toLowerCase().includes(normalizedQuery);
-
-        if (sourceMatch) {
-          return true;
-        }
-
-        return ctf.visibleChallenges.length > 0;
+        return sourceMatch || ctf.visibleChallenges.length > 0;
       });
   }, [ctfs, challenges, query]);
 
@@ -146,9 +127,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
     const confirmed = window.confirm(
       `Delete the challenge "${challenge.name}" from ${challenge.ctfName}? This removes its imported files and stored runs.`,
     );
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     const actionKey = `challenge:${challenge.id}`;
     setPendingKey(actionKey);
@@ -172,10 +151,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
       setCtfs((current) =>
         current.map((ctf) =>
           ctf.id === challenge.ctfId
-            ? {
-                ...ctf,
-                challengeCount: Math.max(0, ctf.challengeCount - 1),
-              }
+            ? { ...ctf, challengeCount: Math.max(0, ctf.challengeCount - 1) }
             : ctf,
         ),
       );
@@ -198,9 +174,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
     const confirmed = window.confirm(
       `Delete the CTF "${ctf.name}" and all of its imported challenges? This removes the full imported source from disk.`,
     );
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     const actionKey = `ctf:${ctf.id}`;
     setPendingKey(actionKey);
@@ -239,48 +213,56 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
 
   return (
     <div className="page-shell">
-      <section
-        aria-labelledby="ctf-browser-heading"
-        className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-end"
-      >
-        <div className="w-full sm:w-96">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by CTF, URL, challenge, category, or path"
-            aria-label="Search CTF sources and challenges"
-            className="h-10 border-input bg-background pl-10"
-          />
-          <Search className="pointer-events-none relative -mt-7 ml-3 size-4 text-muted-foreground" />
+      <section className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
+        <div className="w-full sm:w-80">
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by CTF, challenge, or category"
+              aria-label="Search CTF sources and challenges"
+              className="pl-9"
+            />
+          </div>
         </div>
       </section>
 
-      <Card className="mb-6 border-border bg-card shadow-none">
-        <CardHeader className="pb-4">
+      <Card className="mb-6">
+        <CardHeader className="px-6 pt-6 pb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1">
-              <CardTitle className="text-base text-card-foreground">Source Summary</CardTitle>
+              <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Source Summary</CardTitle>
               <CardDescription>
                 Review imported sources before deleting a full CTF or drilling into a challenge set.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="font-medium">
-                {sourceCount} source{sourceCount === 1 ? "" : "s"}
-              </Badge>
-              <Badge variant="outline">
-                {challengeCount} challenge{challengeCount === 1 ? "" : "s"}
-              </Badge>
+              <Badge variant="secondary">{sourceCount} source{sourceCount === 1 ? "" : "s"}</Badge>
+              <Badge variant="outline">{challengeCount} challenge{challengeCount === 1 ? "" : "s"}</Badge>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6">
           {!filteredSources.length ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-6 py-10 text-center text-sm text-muted-foreground">
+            <p className="py-10 text-center text-sm text-muted-foreground">
               No CTF sources match this filter.
-            </div>
+            </p>
           ) : (
-            <div className="max-h-[26rem] overflow-auto rounded-md border border-border/60">
+            <div className="max-h-[26rem] overflow-auto rounded-md border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -289,7 +271,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                     <TableHead>Challenges</TableHead>
                     <TableHead>Last Import</TableHead>
                     <TableHead>Updated</TableHead>
-                    <TableHead className="w-[11rem] text-right">Actions</TableHead>
+                    <TableHead className="w-[10rem] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -302,19 +284,19 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                       <TableRow
                         key={ctf.id}
                         data-state={isSelected ? "selected" : undefined}
-                        className={cn(isSelected && "bg-muted/40")}
+                        className={cn(isSelected && "bg-muted/30")}
                       >
                         <TableCell>
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => setSelectedCtfId(ctf.id)}
-                                className="text-left text-sm font-medium text-foreground hover:underline"
+                                className="text-left text-sm font-medium text-foreground hover:text-warm-hover transition-colors"
                               >
                                 {ctf.name}
                               </button>
-                              <Badge variant={deletable ? "secondary" : "outline"}>
+                              <Badge variant={deletable ? "secondary" : "outline"} className="text-xs">
                                 {deletable ? "Imported" : "Local"}
                               </Badge>
                             </div>
@@ -362,81 +344,80 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
         </CardContent>
       </Card>
 
-      {notice ? (
+      {notice && (
         <p
           className={cn(
-            "mb-4 rounded-md px-4 py-3 text-sm",
+            "mb-4 rounded-md border px-3 py-2 text-sm",
             notice.kind === "success"
-              ? "border border-primary/35 bg-primary/10 text-foreground"
-              : "border border-destructive/40 bg-destructive/10 text-destructive",
+              ? "border-primary/20 bg-primary/8 text-foreground"
+              : "border-destructive/30 bg-destructive/8 text-destructive",
           )}
         >
           {notice.text}
         </p>
-      ) : null}
+      )}
 
-      {selectedSource ? (
-        <Card className="border-border bg-card shadow-none">
-          <CardHeader className="space-y-3 pb-4">
+      {selectedSource && (
+        <Card>
+          <CardHeader className="px-6 pt-6 pb-4 space-y-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1 w-full">
-                <CardTitle className="text-lg text-card-foreground flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between text-base text-foreground">
                   {selectedSource.name}
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-muted-foreground" 
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground"
                     onClick={() => setSelectedCtfId(null)}
                   >
                     <X className="size-4" />
-                    <span className="sr-only">Close Inspect</span>
+                    <span className="sr-only">Close</span>
                   </Button>
                 </CardTitle>
                 <CardDescription>
-                  Review the current challenge set and delete stale imported challenges one at a time.
+                  Review the current challenge set and delete stale imported challenges.
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">
-                  {selectedSource.visibleChallenges.length} visible challenge
-                  {selectedSource.visibleChallenges.length === 1 ? "" : "s"}
+                  {selectedSource.visibleChallenges.length} visible
                 </Badge>
                 <Badge variant="outline">{selectedSource.lastImportStatus}</Badge>
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-lg border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Source URL</p>
-                <p className="mt-1 break-all font-mono text-xs text-foreground">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Source URL</p>
+                <p className="mt-0.5 break-all font-mono text-xs text-foreground">
                   {selectedSource.baseUrl}
                 </p>
               </div>
-              <div className="rounded-lg border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Challenges Root</p>
-                <p className="mt-1 break-all font-mono text-xs text-foreground">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Challenges Root</p>
+                <p className="mt-0.5 break-all font-mono text-xs text-foreground">
                   {selectedSource.challengesRoot}
                 </p>
               </div>
-              <div className="rounded-lg border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Last Import</p>
-                <p className="mt-1 text-sm text-foreground">{formatDate(selectedSource.lastImportAt)}</p>
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Last Import</p>
+                <p className="mt-0.5 text-sm text-foreground">{formatDate(selectedSource.lastImportAt)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Updated</p>
-                <p className="mt-1 text-sm text-foreground">{formatDate(selectedSource.updatedAt)}</p>
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <p className="text-xs text-muted-foreground">Updated</p>
+                <p className="mt-0.5 text-sm text-foreground">{formatDate(selectedSource.updatedAt)}</p>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             {!selectedSource.visibleChallenges.length ? (
-              <div className="rounded-lg border border-dashed border-border bg-background px-6 py-10 text-center text-sm text-muted-foreground">
+              <p className="py-10 text-center text-sm text-muted-foreground">
                 {selectedSource.challenges.length
-                  ? "No challenges in this source match the current filter."
-                  : "No challenges are available for this source yet."}
-              </div>
+                  ? "No challenges match the current filter."
+                  : "No challenges available for this source."}
+              </p>
             ) : (
-              <div className="max-h-[32rem] overflow-auto rounded-md border border-border/60">
+              <div className="max-h-[32rem] overflow-auto rounded-md border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -446,8 +427,8 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                       <TableHead>Runs</TableHead>
                       <TableHead>State</TableHead>
                       <TableHead>Updated</TableHead>
-                      <TableHead className="min-w-[14rem]">Path</TableHead>
-                      <TableHead className="w-[8rem] text-right">Action</TableHead>
+                      <TableHead className="min-w-[12rem]">Path</TableHead>
+                      <TableHead className="w-[6rem] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -458,7 +439,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                       return (
                         <TableRow key={challenge.id}>
                           <TableCell>
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                               <p className="font-medium text-foreground">{challenge.name}</p>
                               <p className="line-clamp-2 text-xs text-muted-foreground">
                                 {challenge.description || "No description provided."}
@@ -505,7 +486,7 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
             )}
           </CardContent>
         </Card>
-      ) : null}
+      )}
     </div>
   );
 }

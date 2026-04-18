@@ -1,6 +1,7 @@
 """Shared API state containers."""
 
-from backend.api.services.run_manager_service import RunManager
+from backend.orchestrator.orchestrator import AgentOrchestrator
 
+ORCHESTRATOR = AgentOrchestrator()
 
-RUN_MANAGER = RunManager()
+RUN_MANAGER = ORCHESTRATOR

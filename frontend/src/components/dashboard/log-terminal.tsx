@@ -54,9 +54,7 @@ export function LogTerminal({
 
   const flushWriteQueue = useEffectEvent(function runFlushWriteQueue() {
     const instance = instanceRef.current;
-    if (!instance || writeInFlightRef.current || !writeQueueRef.current.length) {
-      return;
-    }
+    if (!instance || writeInFlightRef.current || !writeQueueRef.current.length) return;
 
     writeInFlightRef.current = true;
     const chunk = writeQueueRef.current.join("");
@@ -71,15 +69,9 @@ export function LogTerminal({
   });
 
   const enqueueWrite = useEffectEvent((chunk: string) => {
-    if (!chunk) {
-      return;
-    }
-
+    if (!chunk) return;
     writeQueueRef.current.push(chunk);
-    if (flushFrameRef.current !== null) {
-      return;
-    }
-
+    if (flushFrameRef.current !== null) return;
     flushFrameRef.current = window.requestAnimationFrame(() => {
       flushFrameRef.current = null;
       flushWriteQueue();
@@ -88,35 +80,24 @@ export function LogTerminal({
 
   const writeContent = useEffectEvent((nextContent: string) => {
     const instance = instanceRef.current;
-    if (!instance) {
-      return;
-    }
+    if (!instance) return;
 
     instance.terminal.options.theme = terminalThemes[activeTheme];
-    
+
     const safeContent = nextContent || "No trace output available yet.\n";
     const prevContent = prevContentRef.current;
-    
-    if (safeContent === prevContent) {
-      return;
-    }
+
+    if (safeContent === prevContent) return;
 
     if (prevContent && safeContent.startsWith(prevContent)) {
       const appended = safeContent.slice(prevContent.length);
       if (appended) {
-        // Only auto-scroll if the viewport is currently at the bottom
-        // This prevents the scrollbar from jumping while the user is reading upwards
         const buffer = instance.terminal.buffer.active;
         const isAtBottom = buffer.viewportY === buffer.baseY;
-
         enqueueWrite(appended);
-
-        if (isAtBottom) {
-          instance.terminal.scrollToBottom();
-        }
+        if (isAtBottom) instance.terminal.scrollToBottom();
       }
     } else if (prevContent.startsWith(safeContent)) {
-      // Ignore out-of-order stale snapshots to avoid destructive redraw flicker.
       return;
     } else {
       writeQueueRef.current = [];
@@ -125,14 +106,12 @@ export function LogTerminal({
       enqueueWrite(safeContent);
       instance.terminal.scrollToBottom();
     }
-    
+
     prevContentRef.current = safeContent;
   });
 
   useEffect(() => {
-    if (!mounted || !terminalRootRef.current || instanceRef.current) {
-      return;
-    }
+    if (!mounted || !terminalRootRef.current || instanceRef.current) return;
 
     const terminal = new Terminal({
       allowTransparency: true,
@@ -140,8 +119,8 @@ export function LogTerminal({
       cursorBlink: false,
       disableStdin: true,
       fontFamily: "var(--font-mono)",
-      fontSize: 14,
-      lineHeight: 1.45,
+      fontSize: 13,
+      lineHeight: 1.4,
       smoothScrollDuration: 120,
       scrollSensitivity: 1.1,
       fastScrollSensitivity: 4,
@@ -159,18 +138,10 @@ export function LogTerminal({
     terminal.attachCustomWheelEventHandler(() => true);
     fitAddon.fit();
 
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-
+    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
     resizeObserver.observe(terminalRootRef.current);
 
-    instanceRef.current = {
-      terminal,
-      fitAddon,
-      searchAddon,
-      resizeObserver,
-    };
+    instanceRef.current = { terminal, fitAddon, searchAddon, resizeObserver };
 
     writeContent(content);
 
@@ -189,10 +160,7 @@ export function LogTerminal({
 
   useEffect(() => {
     const instance = instanceRef.current;
-    if (!instance) {
-      return;
-    }
-
+    if (!instance) return;
     instance.terminal.options.theme = terminalThemes[activeTheme];
   }, [activeTheme]);
 
@@ -202,10 +170,7 @@ export function LogTerminal({
 
   useEffect(() => {
     const instance = instanceRef.current;
-    if (!instance || !deferredSearch.trim()) {
-      return;
-    }
-
+    if (!instance || !deferredSearch.trim()) return;
     instance.searchAddon.findNext(deferredSearch, {
       incremental: true,
       caseSensitive: false,
@@ -213,46 +178,39 @@ export function LogTerminal({
   }, [deferredSearch]);
 
   if (!mounted) {
-    return <Skeleton className="h-120 w-full rounded-none" />;
+    return <Skeleton className="h-120 w-full" />;
   }
 
   return (
-    <Card className={cn("gap-0 rounded-none flex flex-col border-border/60 bg-card py-0 shadow-none", className)}>
-      <CardHeader className="flex flex-col gap-5 border-b border-border/60 bg-muted/35 px-6 py-5 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-2">
+    <Card className={cn("flex flex-col h-full", className)}>
+      <CardHeader className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            {summary ? <StatusBadge status={summary.status} /> : null}
+            {summary && <StatusBadge status={summary.status} />}
           </div>
-          <div>
-            <CardTitle className="text-xl font-semibold text-foreground">
-              {summary ? `${summary.challengeName} · ${summary.modelName}` : "No trace selected"}
-            </CardTitle>
-          </div>
+          <CardTitle className="text-sm font-semibold text-foreground">
+            {summary ? `${summary.challengeName} · ${summary.modelName}` : "No trace selected"}
+          </CardTitle>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            placeholder="Search in trace output"
+            placeholder="Search output"
             aria-label="Search terminal output"
-            className="h-11 min-w-0 flex-1 border-border/60 bg-background/65 text-base sm:w-80"
+            className="h-8 sm:w-60"
           />
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
               type="button"
               variant="outline"
-              className="h-11 px-4 text-base"
+              size="sm"
               onClick={() => {
                 const instance = instanceRef.current;
-                if (!instance || !searchValue.trim()) {
-                  return;
-                }
-
-                instance.searchAddon.findPrevious(searchValue, {
-                  caseSensitive: false,
-                });
+                if (!instance || !searchValue.trim()) return;
+                instance.searchAddon.findPrevious(searchValue, { caseSensitive: false });
               }}
               aria-label="Find previous match"
             >
@@ -261,16 +219,11 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="h-11 px-4 text-base"
+              size="sm"
               onClick={() => {
                 const instance = instanceRef.current;
-                if (!instance || !searchValue.trim()) {
-                  return;
-                }
-
-                instance.searchAddon.findNext(searchValue, {
-                  caseSensitive: false,
-                });
+                if (!instance || !searchValue.trim()) return;
+                instance.searchAddon.findNext(searchValue, { caseSensitive: false });
               }}
               aria-label="Find next match"
             >
@@ -279,7 +232,8 @@ export function LogTerminal({
             <Button
               type="button"
               variant="outline"
-              className="h-11 gap-2 px-4 text-base"
+              size="sm"
+              className="gap-1.5"
               onClick={onRefresh}
             >
               Refresh

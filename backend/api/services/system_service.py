@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
-
-import httpx
 
 from backend.config import Settings
 from backend.log_reader import logs_directory
@@ -64,9 +61,6 @@ def model_catalog() -> list[dict[str, Any]]:
     ]
 
 
-
-
-
 def info_payload(active_runs: list[dict[str, Any]]) -> dict[str, Any]:
     settings = Settings()
     saved_config = load_ui_config()
@@ -75,9 +69,7 @@ def info_payload(active_runs: list[dict[str, Any]]) -> dict[str, Any]:
         "repository_root": str(REPO_ROOT),
         "logs_directory": str(logs_directory()),
         "config_path": str(UI_CONFIG_PATH),
-        "python_executable": os.sys.executable,
         "default_models": default_models(settings),
-        "supported_modes": ["ctfd", "solve", "solve-local", "solve-dir"],
         "supported_coordinators": ["openai"],
         "saved_run_config": saved_config.model_dump(mode="json"),
         "settings_summary": settings_summary(settings),

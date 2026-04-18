@@ -61,15 +61,15 @@ def resolve_model(spec: str, settings: Settings) -> Model:
 
 
 def resolve_model_settings(spec: str) -> ModelSettings:
-    """Get provider-specific model settings with caching enabled."""
+    """Get provider-specific model settings."""
     provider = provider_from_spec(spec)
     match provider:
         case "generic-openai" | "openai-compatible" | "openai":
             return OpenAIModelSettings(
-                max_tokens=128_000,
+                max_tokens=4096,
             )
         case _:
-            return ModelSettings(max_tokens=128_000)
+            return ModelSettings(max_tokens=4096)
 
 
 def default_models(settings: Settings | None = None) -> list[str]:

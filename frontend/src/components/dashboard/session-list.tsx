@@ -16,10 +16,7 @@ type SessionListProps = {
 };
 
 function formatUpdatedAt(updatedAt: string | null): string {
-  if (!updatedAt) {
-    return "Awaiting events";
-  }
-
+  if (!updatedAt) return "Awaiting events";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -38,10 +35,7 @@ export function SessionList({
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
   const filteredTraces = traces.filter((trace) => {
-    if (!normalizedQuery) {
-      return true;
-    }
-
+    if (!normalizedQuery) return true;
     return (
       trace.challengeName.toLowerCase().includes(normalizedQuery) ||
       trace.modelName.toLowerCase().includes(normalizedQuery) ||
@@ -56,11 +50,11 @@ export function SessionList({
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Filter traces"
         aria-label="Filter traces"
-        className="h-11 text-base"
+        className="h-8 text-sm"
       />
 
-      <ScrollArea className="mt-4 min-h-0 flex-1 pr-3">
-        <div className="space-y-3">
+      <ScrollArea className="mt-3 min-h-0 flex-1">
+        <div className="space-y-1">
           {filteredTraces.map((trace) => {
             const isActive = selectedId === trace.id;
 
@@ -71,30 +65,30 @@ export function SessionList({
                 aria-pressed={isActive}
                 onClick={() => onSelect(trace.id)}
                 className={cn(
-                  "group w-full border p-5 text-left transition-all",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
+                  "group w-full rounded-md border p-3 text-left transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isActive
-                    ? "border-primary/35 bg-accent/60"
-                    : "border-border/60 bg-card/70 hover:border-primary/25 hover:bg-accent/45",
+                    ? "border-primary/25 bg-accent"
+                    : "border-border bg-background hover:bg-muted/30",
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-base font-semibold leading-tight text-foreground">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {trace.challengeName}
                     </p>
-                    <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
                       {trace.modelName}
                     </p>
                   </div>
                   <StatusBadge status={trace.status} className="shrink-0" />
                 </div>
 
-                <p className="mt-4 text-base leading-7 text-muted-foreground">
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
                   {trace.preview}
                 </p>
 
-                <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                   <span>{trace.eventCount} events</span>
                   <span>{formatUpdatedAt(trace.updatedAt)}</span>
                 </div>
@@ -102,11 +96,11 @@ export function SessionList({
             );
           })}
 
-          {!filteredTraces.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-9 text-center text-base text-muted-foreground">
-              No traces match this filter yet.
-            </div>
-          ) : null}
+          {!filteredTraces.length && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No traces match this filter.
+            </p>
+          )}
         </div>
       </ScrollArea>
     </div>

@@ -39,7 +39,7 @@ from backend.api.repositories.run_repository import (
 )
 from backend.api.services.mappers import solver_run_to_dict
 from backend.api.utils import utcnow
-from backend.config import Settings
+from backend.config import Settings, get_settings
 from backend.log_reader import TraceSummary, list_trace_summaries, logs_directory
 from backend.run_config import SolverRunConfig, build_cli_command, resolve_workdir
 from backend.sandbox import cleanup_challenge_containers
@@ -486,14 +486,19 @@ class RunManager:
 
         process_env = os.environ.copy()
         process_env["CTF_AGENT_STEERING_FILE"] = str(steering_log_path)
+        # Pass the full per-run config as JSON so the solver subprocess can read it
+        from backend.run_config import RUN_CONFIG_ENV_VAR
+        process_env[RUN_CONFIG_ENV_VAR] = config.model_dump_json()
         if challenge_id:
             process_env["CTF_AGENT_CHALLENGE_ID"] = challenge_id
-        if config.openai_compatible_base_url:
-            process_env["OPENAI_COMPATIBLE_BASE_URL"] = config.openai_compatible_base_url
-            process_env["GENERIC_OPENAI_BASE_URL"] = config.openai_compatible_base_url
-        if config.openai_compatible_api_key:
-            process_env["OPENAI_COMPATIBLE_API_KEY"] = config.openai_compatible_api_key
-            process_env["GENERIC_OPENAI_API_KEY"] = config.openai_compatible_api_key
+        # Also forward credentials explicitly in case config file lags
+        settings = get_settings()
+        process_env["OPENAI_COMPATIBLE_BASE_URL"] = (
+            config.openai_compatible_base_url or settings.openai_compatible_base_url
+        )
+        process_env["OPENAI_COMPATIBLE_API_KEY"] = (
+            config.openai_compatible_api_key or settings.openai_compatible_api_key
+        )
 
         output_handle = open(output_log_path, "a", encoding="utf-8")
         try:

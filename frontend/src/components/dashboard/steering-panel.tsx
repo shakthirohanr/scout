@@ -31,13 +31,8 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
     try {
       const response = await fetch(`/api/challenges/${encodeURIComponent(challengeId)}/steer`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: trimmed,
-          source: "dashboard",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed, source: "dashboard" }),
       });
 
       if (!response.ok) {
@@ -62,19 +57,19 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
   const remaining = MAX_STEERING_CHARS - message.length;
 
   return (
-    <Card className="rounded-none border-border/60 bg-card shadow-none">
-      <CardHeader className="px-5 py-4 pb-2">
-        <CardTitle className="text-base">Steer Running Agent</CardTitle>
-        <CardDescription>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">Steer Running Agent</CardTitle>
+        <CardDescription className="text-xs">
           Send high-signal guidance while this challenge is actively running.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 px-5 pb-5 pt-0">
+      <CardContent className="space-y-3">
         <Textarea
           value={message}
           onChange={(event) => setMessage(event.target.value.slice(0, MAX_STEERING_CHARS))}
-          placeholder="Example: Prioritize timing attacks on nonce reuse in the signing endpoint. Ignore brute force and focus on deterministic ECDSA leakage evidence from traces."
-          className="min-h-28"
+          placeholder="Example: Prioritize timing attacks on nonce reuse in the signing endpoint."
+          className="min-h-24 text-sm"
           aria-label="Steering guidance"
           disabled={pending}
         />
@@ -88,6 +83,7 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => {
                 setMessage("");
                 setError(null);
@@ -98,20 +94,19 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
             </Button>
             <Button
               type="button"
+              size="sm"
               onClick={handleSubmit}
               disabled={pending || !message.trim().length}
             >
-              {pending ? "Sending…" : "Send Steering"}
+              {pending ? "Sending..." : "Send Steering"}
             </Button>
           </div>
         </div>
 
-        {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : null}
+        {error && <p className="text-xs text-destructive">{error}</p>}
 
-        {!error && queuedAt ? (
-          <p className="text-sm text-muted-foreground">
+        {!error && queuedAt && (
+          <p className="text-xs text-muted-foreground">
             Steering queued at {new Intl.DateTimeFormat("en-US", {
               hour: "2-digit",
               minute: "2-digit",
@@ -119,7 +114,7 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
               hour12: false,
             }).format(new Date(queuedAt))}.
           </p>
-        ) : null}
+        )}
       </CardContent>
     </Card>
   );

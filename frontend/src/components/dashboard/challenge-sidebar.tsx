@@ -13,9 +13,7 @@ type ChallengeSidebarProps = {
 };
 
 function formatUpdatedAt(value: string | null): string {
-  if (!value) {
-    return "No updates";
-  }
+  if (!value) return "No updates";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -31,8 +29,8 @@ export function ChallengeSidebar({
 }: ChallengeSidebarProps) {
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <ScrollArea className="min-h-0 flex-1 pr-3">
-        <div className="space-y-3">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-1">
           {challenges.map((challenge) => {
             const isActive = challenge.id === activeChallengeId;
             return (
@@ -40,17 +38,17 @@ export function ChallengeSidebar({
                 key={challenge.id}
                 href={`/challenge/${encodeURIComponent(challenge.id)}`}
                 className={cn(
-                  "block border p-5 text-left transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
+                  "block rounded-md border p-3 text-left transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isActive
-                    ? "border-primary/35 bg-accent/60"
-                    : "border-border/60 bg-card/70 hover:border-primary/25 hover:bg-accent/45",
+                    ? "border-primary/20 bg-accent"
+                    : "border-border bg-background hover:bg-muted/30",
                 )}
               >
-                <p className="text-base font-semibold leading-tight text-foreground">
+                <p className="text-sm font-medium text-foreground">
                   {challenge.name}
                 </p>
-                <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                   <span>{challenge.traceCount} trace{challenge.traceCount === 1 ? "" : "s"}</span>
                   <span>{formatUpdatedAt(challenge.updatedAt)}</span>
                 </div>
@@ -58,11 +56,11 @@ export function ChallengeSidebar({
             );
           })}
 
-          {!challenges.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-9 text-center text-base text-muted-foreground">
-              No challenges available yet.
-            </div>
-          ) : null}
+          {!challenges.length && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No challenges available.
+            </p>
+          )}
         </div>
       </ScrollArea>
     </div>

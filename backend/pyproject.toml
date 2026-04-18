@@ -22,9 +22,8 @@ dependencies = [
 ]
 
 [project.scripts]
-ctf-solve = "backend.cli:main"
-ctf-msg = "backend.cli:msg"
-ctf-api = "backend.api_server:main"
+cryptoagent = "backend.cli:main"
+cryptoagent-api = "backend.api_server:main"
 
 [build-system]
 requires = ["hatchling"]

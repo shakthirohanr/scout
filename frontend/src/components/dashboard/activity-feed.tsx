@@ -40,10 +40,7 @@ function describeEvent(event: TraceEvent): ActivityDetails {
 }
 
 function formatEventTime(ts: number | undefined): string {
-  if (!ts) {
-    return "Unknown time";
-  }
-
+  if (!ts) return "--:--:--";
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -56,43 +53,39 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
   const recentEvents = [...events].reverse().slice(0, 12);
 
   return (
-    <div className="border border-border/60 bg-card p-6 md:p-7 shadow-none">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Recent activity</h2>
-        </div>
-      </div>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h2 className="mb-4 text-sm font-medium text-foreground">Recent activity</h2>
 
-      <ScrollArea className="h-92 pr-4">
-        <div className="space-y-4">
+      <ScrollArea className="h-80">
+        <div className="space-y-3">
           {recentEvents.map((event, index) => {
             const details = describeEvent(event);
 
             return (
-              <div key={`${event.ts}-${event.type}-${index}`} className="space-y-4">
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-base font-medium capitalize text-foreground">
+              <div key={`${event.ts}-${event.type}-${index}`} className="space-y-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium capitalize text-foreground">
                       {details.label}
                     </p>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {formatEventTime(event.ts)}
                     </span>
                   </div>
-                  <p className="text-base leading-7 text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {details.detail}
                   </p>
                 </div>
-                {index < recentEvents.length - 1 ? <Separator /> : null}
+                {index < recentEvents.length - 1 && <Separator />}
               </div>
             );
           })}
 
-          {!recentEvents.length ? (
-            <div className="border border-dashed border-border/70 bg-card/60 px-5 py-11 text-center text-base text-muted-foreground">
+          {!recentEvents.length && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
               Start a solver run to populate the activity feed.
-            </div>
-          ) : null}
+            </p>
+          )}
         </div>
       </ScrollArea>
     </div>

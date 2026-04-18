@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, RefreshCw, ShieldPlus, Upload } from "lucide-react";
+import { Minus, Play, Plus, RefreshCw, ShieldPlus, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState, useTransition } from "react";
 
@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -28,6 +26,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
 import type { ChallengeCatalogItem, ChallengeRunState, ImportCTFInput } from "@/lib/types";
 
 type ChallengeHomeProps = {
@@ -36,17 +35,7 @@ type ChallengeHomeProps = {
 
 type AuthMode = "token" | "credentials" | "none";
 
-function formatStartedAt(value: string | null): string {
-  if (!value) {
-    return "Not started";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+type FilterKey = `category:${string}` | `state:${string}` | `ctf:${string}`;
 
 function formatChallengeState(state: ChallengeRunState): string {
   if (state === "starting") return "Starting";
@@ -71,6 +60,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
   const [error, setError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [agentCount, setAgentCount] = useState(1);
 
   const [name, setName] = useState("");
   const [ctfdUrl, setCtfdUrl] = useState("");
@@ -80,28 +70,77 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
   const [password, setPassword] = useState("");
   const [challengesRoot, setChallengesRoot] = useState("challenges");
 
+  const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set());
+
   const [isPending, startTransition] = useTransition();
   const [isImporting, startImportTransition] = useTransition();
 
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const c of challenges) {
+      if (c.category) cats.add(c.category);
+    }
+    return Array.from(cats).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [challenges]);
+
+  const uniqueStates = useMemo(() => {
+    const states = new Set<string>();
+    for (const c of challenges) {
+      states.add(c.state);
+    }
+    return Array.from(states).sort();
+  }, [challenges]);
+
+  const uniqueCtfNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of challenges) {
+      if (c.ctfName) names.add(c.ctfName);
+    }
+    return Array.from(names).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [challenges]);
+
   const filtered = useMemo(() => {
+    let result = challenges;
+
     const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return challenges;
+    if (normalized) {
+      result = result.filter(
+        (item) =>
+          item.name.toLowerCase().includes(normalized) ||
+          item.ctfName.toLowerCase().includes(normalized) ||
+          item.category.toLowerCase().includes(normalized) ||
+          item.path.toLowerCase().includes(normalized),
+      );
     }
 
-    return challenges.filter((item) => {
-      return (
-        item.name.toLowerCase().includes(normalized) ||
-        item.ctfName.toLowerCase().includes(normalized) ||
-        item.category.toLowerCase().includes(normalized) ||
-        item.path.toLowerCase().includes(normalized)
-      );
-    });
-  }, [challenges, query]);
+    if (activeFilters.size > 0) {
+      const activeCategories = new Set<string>();
+      const activeStates = new Set<string>();
+      const activeCtfs = new Set<string>();
+
+      for (const key of activeFilters) {
+        if (key.startsWith("category:")) activeCategories.add(key.slice(9));
+        else if (key.startsWith("state:")) activeStates.add(key.slice(6));
+        else if (key.startsWith("ctf:")) activeCtfs.add(key.slice(4));
+      }
+
+      result = result.filter((item) => {
+        if (activeCategories.size > 0 && !activeCategories.has(item.category)) return false;
+        if (activeStates.size > 0 && !activeStates.has(item.state)) return false;
+        if (activeCtfs.size > 0 && !activeCtfs.has(item.ctfName)) return false;
+        return true;
+      });
+    }
+
+    return result;
+  }, [challenges, query, activeFilters]);
 
   const groupedChallenges = useMemo(() => {
     const grouped = new Map<string, ChallengeCatalogItem[]>();
-
     for (const item of filtered) {
       const key = item.ctfName || "Unknown CTF";
       const existing = grouped.get(key);
@@ -111,11 +150,26 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         grouped.set(key, [item]);
       }
     }
-
     return Array.from(grouped.entries()).sort(([a], [b]) =>
       a.localeCompare(b, undefined, { sensitivity: "base" }),
     );
   }, [filtered]);
+
+  function toggleFilter(key: FilterKey) {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setActiveFilters(new Set());
+  }
 
   function handleStart(challengeId: string) {
     setPendingId(challengeId);
@@ -125,10 +179,8 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
       try {
         const response = await fetch("/api/challenges/start", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ challengeId }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ challengeId, agentCount }),
         });
 
         if (!response.ok) {
@@ -186,9 +238,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
       try {
         const response = await fetch("/api/ctfs/import", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
 
@@ -223,32 +273,17 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
 
   return (
     <div className="page-shell">
-      <section
-        aria-labelledby="challenge-catalog-heading"
-        className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-end"
-      >
-        <div className="w-full sm:w-96">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by challenge, CTF, category, or path"
-            aria-label="Search challenges"
-            className="h-10 border-input bg-background"
-          />
-        </div>
-      </section>
-
-      <Card className="mb-8 border-border bg-card shadow-sm">
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-base text-card-foreground">
-            <ShieldPlus className="size-5 text-muted-foreground" aria-hidden="true" />
-            Add New CTF
+      <Card className="mb-6">
+        <CardHeader className="px-6 pt-6 pb-4">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            <ShieldPlus className="size-4" aria-hidden="true" />
+            Import CTF
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6">
           <form className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={handleImport}>
-            <div className="space-y-2">
-              <label htmlFor="ctf-name" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+            <div className="space-y-1.5">
+              <label htmlFor="ctf-name" className="text-xs text-muted-foreground">
                 CTF Name
               </label>
               <Input
@@ -256,12 +291,11 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="PlaidCTF 2026"
-                className="h-10"
               />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="ctf-url" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+            <div className="space-y-1.5">
+              <label htmlFor="ctf-url" className="text-xs text-muted-foreground">
                 CTFd URL
               </label>
               <Input
@@ -269,12 +303,11 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                 value={ctfdUrl}
                 onChange={(event) => setCtfdUrl(event.target.value)}
                 placeholder="https://ctf.example.com"
-                className="h-10"
               />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="ctf-root" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+            <div className="space-y-1.5">
+              <label htmlFor="ctf-root" className="text-xs text-muted-foreground">
                 Challenges Root
               </label>
               <Input
@@ -282,17 +315,16 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                 value={challengesRoot}
                 onChange={(event) => setChallengesRoot(event.target.value)}
                 placeholder="challenges"
-                className="h-10"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Auth Mode</label>
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Auth Mode</label>
               <Select
                 value={authMode}
                 onValueChange={(value) => setAuthMode(value as AuthMode)}
               >
-                <SelectTrigger className="h-10 w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select auth mode" />
                 </SelectTrigger>
                 <SelectContent
@@ -312,9 +344,9 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             </div>
 
             {authMode === "token" ? (
-              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="ctf-token" className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_10rem] xl:items-end xl:gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="ctf-token" className="text-xs text-muted-foreground">
                     CTFd Token
                   </label>
                   <Input
@@ -323,10 +355,8 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                     onChange={(event) => setToken(event.target.value)}
                     type="password"
                     placeholder="ctfd_xxxxxxxxx"
-                    className="h-10"
                   />
                 </div>
-
                 <Button
                   type="submit"
                   size="lg"
@@ -334,20 +364,17 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   className="mt-4 w-full gap-2 xl:mt-0"
                 >
                   {isImporting ? (
-                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                    <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Upload className="size-4" aria-hidden="true" />
+                    <Upload className="size-3.5" aria-hidden="true" />
                   )}
                   Import CTF
                 </Button>
               </div>
             ) : authMode === "credentials" ? (
-              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="ctf-username"
-                    className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
-                  >
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_10rem] xl:items-end xl:gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="ctf-username" className="text-xs text-muted-foreground">
                     Username
                   </label>
                   <Input
@@ -355,14 +382,10 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     placeholder="teamname"
-                    className="h-10"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="ctf-password"
-                    className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
-                  >
+                <div className="space-y-1.5">
+                  <label htmlFor="ctf-password" className="text-xs text-muted-foreground">
                     Password
                   </label>
                   <Input
@@ -371,10 +394,8 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                     onChange={(event) => setPassword(event.target.value)}
                     type="password"
                     placeholder="password"
-                    className="h-10"
                   />
                 </div>
-
                 <Button
                   type="submit"
                   size="lg"
@@ -382,19 +403,18 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   className="mt-4 w-full gap-2 xl:mt-0"
                 >
                   {isImporting ? (
-                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                    <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Upload className="size-4" aria-hidden="true" />
+                    <Upload className="size-3.5" aria-hidden="true" />
                   )}
                   Import CTF
                 </Button>
               </div>
             ) : (
-              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-end xl:gap-4">
+              <div className="md:col-span-2 xl:col-span-4 xl:grid xl:grid-cols-[minmax(0,1fr)_10rem] xl:items-end xl:gap-4">
                 <p className="text-sm text-muted-foreground">
-                  Public CTF selected. No token or credentials are required.
+                  Public CTF selected. No authentication required.
                 </p>
-
                 <Button
                   type="submit"
                   size="lg"
@@ -402,9 +422,9 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                   className="mt-4 w-full gap-2 xl:mt-0"
                 >
                   {isImporting ? (
-                    <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+                    <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Upload className="size-4" aria-hidden="true" />
+                    <Upload className="size-3.5" aria-hidden="true" />
                   )}
                   Import CTF
                 </Button>
@@ -412,103 +432,245 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             )}
           </form>
 
-          {importError ? (
-            <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {importError && (
+            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
               {importError}
             </p>
-          ) : null}
-          {importMessage ? (
-            <p className="mt-4 rounded-md border border-primary/35 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          )}
+          {importMessage && (
+            <p className="mt-4 rounded-md border border-primary/20 bg-primary/8 px-3 py-2 text-sm text-foreground">
               {importMessage}
             </p>
-          ) : null}
+          )}
         </CardContent>
       </Card>
 
-      {error ? (
-        <p className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <section className="mb-4 flex flex-col gap-3">
+        <div className="relative w-full sm:max-w-sm">
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by challenge, CTF, or category"
+            aria-label="Search challenges"
+            className="pl-9"
+          />
+        </div>
+      </section>
+
+      {(uniqueCategories.length > 0 || uniqueStates.length > 0 || uniqueCtfNames.length > 0) && (
+        <section className="mb-6 space-y-3">
+          {uniqueCategories.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Category
+              </span>
+              {uniqueCategories.map((cat) => {
+                const key = `category:${cat}` as FilterKey;
+                const active = activeFilters.has(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleFilter(key)}
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs transition-colors",
+                      active
+                        ? "bg-surface-500 text-foreground"
+                        : "bg-surface-300 text-muted-foreground hover:text-warm-hover",
+                    )}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {uniqueStates.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                State
+              </span>
+              {uniqueStates.map((state) => {
+                const key = `state:${state}` as FilterKey;
+                const active = activeFilters.has(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleFilter(key)}
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs transition-colors",
+                      active
+                        ? "bg-surface-500 text-foreground"
+                        : "bg-surface-300 text-muted-foreground hover:text-warm-hover",
+                    )}
+                  >
+                    {formatChallengeState(state as ChallengeRunState).toLowerCase()}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {uniqueCtfNames.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                CTF
+              </span>
+              {uniqueCtfNames.map((ctfName) => {
+                const key = `ctf:${ctfName}` as FilterKey;
+                const active = activeFilters.has(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleFilter(key)}
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs transition-colors",
+                      active
+                        ? "bg-surface-500 text-foreground"
+                        : "bg-surface-300 text-muted-foreground hover:text-warm-hover",
+                    )}
+                  >
+                    {ctfName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {activeFilters.size > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-warm-hover transition-colors"
+            >
+              <X className="size-3" />
+              Clear filters
+            </button>
+          )}
+        </section>
+      )}
+
+      {error && (
+        <p className="mb-4 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
-      ) : null}
+      )}
 
       <main className="flex-1">
         {!filtered.length ? (
-          <div className="mt-8 rounded-lg border border-dashed border-border bg-card px-6 py-12 text-center text-sm text-muted-foreground">
+          <p className="py-12 text-center text-sm text-muted-foreground">
             No challenges match your filter.
-          </div>
+          </p>
         ) : (
-          <Accordion type="multiple" defaultValue={groupedChallenges.map(([ctfName]) => ctfName)} className="w-full space-y-4">
+          <Accordion defaultValue={groupedChallenges.map(([ctfName]) => ctfName)} className="w-full space-y-3">
             {groupedChallenges.map(([ctfName, ctfChallenges]) => (
-              <AccordionItem key={ctfName} value={ctfName} className="border border-border/60 rounded-xl bg-card shadow-sm overflow-hidden px-1">
-                <AccordionTrigger className="px-5 py-4 hover:bg-muted/30 transition-colors [&[data-state=open]]:border-b [&[data-state=open]]:border-border/60 hover:no-underline">
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-semibold tracking-tight text-foreground">{ctfName}</span>
-                    <Badge variant="secondary" className="font-medium bg-muted text-muted-foreground hover:bg-muted/80">
-                      {ctfChallenges.length} {ctfChallenges.length === 1 ? "challenge" : "challenges"}
+              <AccordionItem key={ctfName} value={ctfName} className="rounded-lg border border-border bg-card overflow-hidden">
+                <AccordionTrigger className="px-5 py-3.5 hover:bg-muted/30 transition-colors [&[data-state=open]]:border-b [&[data-state=open]]:border-border hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{ctfName}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {ctfChallenges.length}
                     </Badge>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="p-5 pt-3 bg-muted/5">
-                  <div className="flex flex-col gap-3">
+                <AccordionContent className="px-5 py-3">
+                  <div className="flex flex-col gap-2">
                     {ctfChallenges.map((challenge) => {
                       const isStarting = pendingId === challenge.id;
                       const challengeBusy = isChallengeBusy(challenge.state);
-                      
+
                       return (
                         <div
                           key={challenge.id}
-                          className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg border border-border bg-background hover:border-primary/40 transition-all shadow-sm group"
+                          className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-md border border-border bg-background"
                         >
-                          <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-medium text-base text-foreground group-hover:text-primary transition-colors truncate">
+                              <h3 className="font-medium text-sm text-foreground">
                                 {challenge.name}
                               </h3>
-                              <Badge variant="outline" className="text-xs bg-background">
+                              <Badge variant="outline" className="text-xs font-mono">
                                 {challenge.value || 0} pts
                               </Badge>
-                              {challenge.latestFlag ? (
-                                <Badge variant="default" className="bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-none font-mono text-xs hover:bg-emerald-500/25 transition-colors">
+                              {challenge.latestFlag && (
+                                <Badge className="bg-emerald-600/10 text-emerald-700 border-none text-xs font-mono">
                                   Captured
                                 </Badge>
-                              ) : null}
+                              )}
                             </div>
-                            <p className="text-sm text-muted-foreground line-clamp-1 group-hover:line-clamp-2 transition-all">
+                            <p className="text-sm text-muted-foreground line-clamp-1">
                               {challenge.description || "No description available."}
                             </p>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground/80">
-                              <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary/40 block shadow-[0_0_8px_rgba(var(--primary),0.5)]"></span>
-                                {challenge.category || "Uncategorized"}
-                              </span>
-                              <span>•</span>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{challenge.category || "Uncategorized"}</span>
+                              <span className="text-border">·</span>
                               <span className="capitalize">{formatChallengeState(challenge.state).toLowerCase()}</span>
-                              <span>•</span>
+                              <span className="text-border">·</span>
                               <span>{challenge.distfileCount} files</span>
                             </div>
                           </div>
-                          
-                          <div className="shrink-0 flex items-center md:justify-end">
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface-100 px-1 py-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setAgentCount((c) => Math.max(1, c - 1))}
+                                disabled={challengeBusy}
+                                className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                                aria-label="Decrease agent count"
+                              >
+                                <Minus className="size-3.5" />
+                              </button>
+                              <span className="min-w-[2ch] text-center text-xs font-medium tabular-nums text-foreground">
+                                {agentCount}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setAgentCount((c) => Math.min(10, c + 1))}
+                                disabled={challengeBusy}
+                                className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                                aria-label="Increase agent count"
+                              >
+                                <Plus className="size-3.5" />
+                              </button>
+                            </div>
                             <Button
                               type="button"
                               size="sm"
                               variant={challengeBusy ? "outline" : "default"}
                               onClick={() => handleStart(challenge.id)}
                               disabled={isStarting || isPending || challengeBusy}
-                              className="w-full md:w-auto h-9 px-4 gap-2 shadow-sm font-medium"
+                              className="gap-1.5"
                             >
                               {isStarting ? (
                                 <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                               ) : (
                                 <Play className="size-3.5" aria-hidden="true" />
                               )}
-                              {challengeBusy ? "Running" : "Run Solver"}
+                              {challengeBusy ? "Running" : "Run"}
                             </Button>
                           </div>
                         </div>
                       );
                     })}
-                   </div>
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             ))}

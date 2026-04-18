@@ -29,6 +29,7 @@ class RunOutputResponse(BaseModel):
 class StartChallengeRequest(BaseModel):
     challenge_id: str = Field(min_length=1)
     launch_solver: bool = True
+    agent_count: int = Field(default=1, ge=1, le=10)
 
 
 class SteerChallengeRequest(BaseModel):
@@ -94,9 +95,7 @@ class CTFImportRequest(BaseModel):
         if self.auth_mode == "credentials" and (
             not self.username.strip() or not self.password.strip()
         ):
-            raise ValueError(
-                "username and password are required when auth_mode=credentials"
-            )
+            raise ValueError("username and password are required when auth_mode=credentials")
         return self
 
 

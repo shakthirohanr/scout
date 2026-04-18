@@ -136,4 +136,6 @@ exec python3 /opt/cado-nfs/cado-nfs.py "$@"\n' > /usr/local/bin/cado-nfs \
 # ── Tools reference ──────────────────────────────────────────────────────────
 COPY sandbox/sandbox-tools.txt /tools.txt
 
+VOLUME ["/challenge/distfiles", "/challenge/workspace"]
+
 WORKDIR /challenge

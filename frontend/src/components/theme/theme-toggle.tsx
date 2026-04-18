@@ -23,14 +23,11 @@ export function ThemeToggle() {
           <Button
             type="button"
             variant="outline"
-            size="icon"
+            size="icon-sm"
             className="rounded-full"
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
             onClick={() => {
-              if (!mounted) {
-                return;
-              }
-
+              if (!mounted) return;
               setTheme(isDark ? "light" : "dark");
             }}
           />

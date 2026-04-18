@@ -1,5 +1,4 @@
 import contextlib
-from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +9,7 @@ from backend.api.routers.runs import router as runs_router
 from backend.api.routers.system import router as system_router
 from backend.api.routers.traces import router as traces_router
 from backend.api.services.system_service import project_version
-from backend.api.state import RUN_MANAGER
+from backend.api.state import ORCHESTRATOR
 from backend.api.utils import utcnow_iso
 
 DEFAULT_CORS_ORIGINS = [
@@ -21,16 +20,12 @@ DEFAULT_CORS_ORIGINS = [
 ]
 
 
-
-
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_database()
-    RUN_MANAGER.sync_runs()
+    await ORCHESTRATOR.start()
     yield
-    # Shutdown
-    RUN_MANAGER.shutdown()
+    await ORCHESTRATOR.shutdown()
 
 
 def create_app(cors_origins: list[str] | None = None) -> FastAPI:

@@ -35,19 +35,16 @@ const cards = [
 
 export function OverviewCards({ totals }: OverviewCardsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => {
         const value = totals[card.key];
 
         return (
-          <Card
-            key={card.key}
-            className="overflow-hidden rounded-none border-border/60 bg-card shadow-none"
-          >
-            <CardContent className="flex items-start justify-between gap-4 p-6">
-              <div className="space-y-2">
-                <p className="text-base text-muted-foreground">{card.label}</p>
-                <p className="text-3xl font-semibold tracking-tight text-foreground">
+          <Card key={card.key}>
+            <CardContent className="flex items-start justify-between gap-4 p-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{card.label}</p>
+                <p className="text-2xl font-semibold tracking-tight text-foreground">
                   {card.formatter(value)}
                 </p>
               </div>

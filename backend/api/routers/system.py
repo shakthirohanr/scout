@@ -8,17 +8,16 @@ from fastapi import APIRouter
 
 from backend.api.schemas import ConfigResponse
 from backend.api.services.system_service import info_payload, settings_summary
-from backend.api.state import RUN_MANAGER
+from backend.api.state import ORCHESTRATOR
 from backend.config import Settings
 from backend.run_config import SolverRunConfig, save_ui_config
-
 
 router = APIRouter(prefix="/api/v1", tags=["system"])
 
 
 @router.get("/info")
 def info() -> dict[str, Any]:
-    return info_payload(RUN_MANAGER.list_runs())
+    return info_payload(ORCHESTRATOR.list_runs())
 
 
 @router.get("/config", response_model=ConfigResponse)
@@ -44,6 +43,3 @@ def put_config(config: SolverRunConfig) -> ConfigResponse:
         config_path=str(UI_CONFIG_PATH),
         settings_summary=settings_summary(settings),
     )
-
-
-
