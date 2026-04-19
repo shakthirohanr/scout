@@ -69,13 +69,13 @@ export function SteeringPanel({ challengeId, activeRunIds }: SteeringPanelProps)
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">Steer Running Agent</CardTitle>
         <CardDescription className="text-xs">
           Send high-signal guidance while this challenge is actively running.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-2 pb-5">
         {showRunSelector && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Target:</span>

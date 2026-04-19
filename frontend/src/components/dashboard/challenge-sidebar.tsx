@@ -4,10 +4,10 @@ import Link from "next/link";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import type { ChallengeItem } from "@/lib/types";
+import type { ChallengeCatalogItem } from "@/lib/types";
 
 type ChallengeSidebarProps = {
-  challenges: ChallengeItem[];
+  challenges: ChallengeCatalogItem[];
   activeChallengeId: string | null;
   className?: string;
 };
@@ -49,7 +49,7 @@ export function ChallengeSidebar({
                   {challenge.name}
                 </p>
                 <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{challenge.traceCount} trace{challenge.traceCount === 1 ? "" : "s"}</span>
+                  <span>{challenge.runCount} run{challenge.runCount === 1 ? "" : "s"}</span>
                   <span>{formatUpdatedAt(challenge.updatedAt)}</span>
                 </div>
               </Link>

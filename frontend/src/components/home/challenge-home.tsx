@@ -614,9 +614,11 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
             {groupedChallenges.map(([ctfName, ctfChallenges]) => (
               <AccordionItem key={ctfName} value={ctfName} className="rounded-lg border border-border bg-card overflow-hidden">
                 <AccordionTrigger className="px-5 py-3.5 hover:bg-muted/30 transition-colors [&[data-state=open]]:border-b [&[data-state=open]]:border-border hover:no-underline">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{ctfName}</span>
-                    <Badge variant="secondary" className="text-xs">
+                  <div className="flex min-w-0 items-center gap-2 text-left">
+                    <span className="min-w-0 break-words text-sm font-semibold text-foreground">
+                      {ctfName}
+                    </span>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
                       {ctfChallenges.length}
                     </Badge>
                   </div>
@@ -630,11 +632,11 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                       return (
                         <div
                           key={challenge.id}
-                          className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-md border border-border bg-background"
+                          className="flex flex-col justify-between gap-3 rounded-md border border-border bg-background p-4 md:flex-row md:items-start"
                         >
                           <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-medium text-sm text-foreground">
+                              <h3 className="break-words text-sm font-medium text-foreground">
                                 {challenge.name}
                               </h3>
                               <Badge variant="outline" className="text-xs font-mono">
@@ -646,7 +648,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground line-clamp-1">
+                            <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
                               {challenge.description || "No description available."}
                             </p>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -658,7 +660,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex flex-wrap items-center gap-3 md:shrink-0">
                             <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface-100 px-1 py-0.5">
                               <button
                                 type="button"

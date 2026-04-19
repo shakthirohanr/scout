@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload = await importCTF({
+    const result = await importCTF({
       name,
       ctfdUrl,
       authMode,
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       challengesRoot: body.challengesRoot,
     });
 
-    return NextResponse.json(payload);
+    return NextResponse.json({ ctfId: result.ctfId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to import CTF.";
     return NextResponse.json({ error: message }, { status: 500 });

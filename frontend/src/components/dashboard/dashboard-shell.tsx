@@ -14,13 +14,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { useLogDashboard } from "@/hooks/use-log-dashboard";
 import { toast } from "sonner";
-import type { ChallengeCatalogItem, TraceSummary } from "@/lib/types";
+import type { ChallengeCatalogItem, ChallengeRunState } from "@/lib/types";
 
 type DashboardShellProps = {
-  initialTraces: TraceSummary[];
-  catalogChallenges?: ChallengeCatalogItem[];
-  activeChallengeId?: string | null;
-  activeChallengeName?: string | null;
+  challengeId: string;
+  challengeName: string;
+  challengeState: ChallengeRunState;
+  catalogChallenges: ChallengeCatalogItem[];
 };
 
 function formatLastSync(date: string | null): string {
@@ -34,40 +34,40 @@ function formatLastSync(date: string | null): string {
 }
 
 export function DashboardShell({
-  initialTraces,
-  catalogChallenges = [],
-  activeChallengeId = null,
-  activeChallengeName = null,
+  challengeId,
+  challengeName,
+  challengeState,
+  catalogChallenges,
 }: DashboardShellProps) {
   const router = useRouter();
   const [killPending, setKillPending] = useState(false);
   const [killError, setKillError] = useState<string | null>(null);
   const [stopPendingIds, setStopPendingIds] = useState<Set<string>>(new Set());
+
+  const catalogItem = catalogChallenges.find((c) => c.id === challengeId);
+  const activeRunIds = catalogItem?.activeRunIds ?? [];
+
   const {
-    activeChallenge,
-    filteredTraces,
+    traces,
     selectedId,
     setSelectedId,
     selectedTrace,
     detail,
+    isInitializing,
+    noTracesFound,
     error,
     lastSyncedAt,
     refreshNow,
     totals,
-  } = useLogDashboard(
-    initialTraces,
-    activeChallengeId,
-    activeChallengeName,
-    catalogChallenges,
-  );
+  } = useLogDashboard(challengeId, challengeState, activeRunIds, catalogChallenges);
 
   async function handleKillAgent() {
-    if (!activeChallengeId || killPending) return;
+    if (killPending) return;
 
     setKillPending(true);
     setKillError(null);
     try {
-      const response = await fetch(`/api/challenges/${encodeURIComponent(activeChallengeId)}/kill`, {
+      const response = await fetch(`/api/challenges/${encodeURIComponent(challengeId)}/kill`, {
         method: "POST",
       });
 
@@ -123,25 +123,45 @@ export function DashboardShell({
     }
   }
 
-  const hasRunningTrace = filteredTraces.some((trace) => trace.status === "running");
-  const hasTerminalTrace = filteredTraces.some((trace) =>
+  const hasRunningTrace = traces.some((trace) => trace.status === "running");
+  const hasTerminalTrace = traces.some((trace) =>
     ["solved", "gave_up", "cancelled", "finished", "failed", "error"].includes(trace.status)
   );
   const isAgentRunning =
     hasRunningTrace ||
-    ((activeChallenge?.state === "starting" || activeChallenge?.state === "running") &&
+    ((challengeState === "starting" || challengeState === "running") &&
       !hasTerminalTrace);
 
   useEffect(() => {
-    const challengeTitle = activeChallenge?.name ?? activeChallengeName;
-    document.title = challengeTitle || "CryptoAgent";
-  }, [activeChallenge?.name, activeChallengeName]);
+    document.title = challengeName || "CryptoAgent";
+  }, [challengeName]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background p-4 sm:p-6">
       <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col">
-          {filteredTraces.length ? (
+          {isInitializing ? (
+            <Card className="h-full border-dashed">
+              <CardContent className="flex h-full items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3">
+                  <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Agent initializing...</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : noTracesFound ? (
+            <Card className="h-full border-dashed">
+              <CardContent className="flex h-full items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-sm text-muted-foreground">No trace output found for this run.</p>
+                  <Button type="button" variant="outline" size="sm" onClick={refreshNow} className="gap-1.5">
+                    <RefreshCw className="size-3.5" />
+                    Retry
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : traces.length ? (
             <LogTerminal
               summary={selectedTrace}
               content={detail?.terminalOutput ?? ""}
@@ -158,7 +178,7 @@ export function DashboardShell({
         </div>
 
         <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
-          {filteredTraces.length > 0 && (
+          {traces.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-full bg-surface-300 px-2.5 py-0.5 text-xs text-muted-foreground">
                 {totals.running} active
@@ -185,7 +205,7 @@ export function DashboardShell({
                   <CardTitle className="text-base font-semibold text-foreground">
                     {selectedTrace
                       ? `${selectedTrace.challengeName} on ${selectedTrace.modelName}`
-                      : activeChallenge?.name ?? activeChallengeName ?? "Challenge dashboard"}
+                      : challengeName ?? "Challenge dashboard"}
                   </CardTitle>
                   <CardDescription className="text-xs">
                     Inspect trace output, steer the agent, and manage active sessions.
@@ -207,7 +227,7 @@ export function DashboardShell({
                       Sync
                     </Button>
 
-                    {activeChallengeId && isAgentRunning && (
+                    {isAgentRunning && (
                       <Button
                         type="button"
                         variant="destructive"
@@ -240,30 +260,28 @@ export function DashboardShell({
               </div>
             </CardHeader>
             {error || killError ? (
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 pb-5">
                 <Separator className="mb-3" />
                 <p className="text-sm text-destructive">{killError ?? error}</p>
               </CardContent>
             ) : null}
           </Card>
 
-          {activeChallengeId && (
-            <SteeringPanel
-              challengeId={activeChallengeId}
-              activeRunIds={activeChallenge?.activeRunIds ?? []}
-            />
-          )}
+          <SteeringPanel
+            challengeId={challengeId}
+            activeRunIds={activeRunIds}
+          />
 
-          {activeChallenge && activeChallenge.activeRunIds.length > 0 && (
+          {activeRunIds.length > 0 && (
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Active Runs</CardTitle>
                 <CardDescription className="text-xs">
                   Stop individual runs or kill all agents for this challenge.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-1.5 pt-0">
-                {activeChallenge.activeRunIds.map((runId, index) => (
+              <CardContent className="space-y-1.5 pt-2 pb-5">
+                {activeRunIds.map((runId, index) => (
                   <div
                     key={runId}
                     className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-1.5"
@@ -288,17 +306,17 @@ export function DashboardShell({
             </Card>
           )}
 
-          {filteredTraces.length > 1 && (
+          {traces.length > 1 && (
             <Card className="min-h-0 max-h-[22rem]">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Session Traces</CardTitle>
                 <CardDescription className="text-xs">
                   Switch between challenge runs.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="min-h-0 flex-1 pt-0">
+              <CardContent className="min-h-0 flex-1 pt-2 pb-4">
                 <SessionList
-                  traces={filteredTraces}
+                  traces={traces}
                   selectedId={selectedId}
                   onSelect={(traceId) => setSelectedId(traceId)}
                   className="h-full"

@@ -12,11 +12,12 @@ from backend.log_reader import get_trace_detail, list_trace_summaries, logs_dire
 router = APIRouter(prefix="/api/v1", tags=["traces"])
 
 
-
-
 @router.get("/traces")
-def traces() -> dict[str, Any]:
-    summaries = [summary.to_dict() for summary in list_trace_summaries()]
+def traces(challenge_id: str | None = Query(default=None)) -> dict[str, Any]:
+    summaries = list_trace_summaries()
+    if challenge_id is not None:
+        summaries = [s for s in summaries if s.challenge_id == challenge_id]
+    summaries = [summary.to_dict() for summary in summaries]
     return {
         "traces": summaries,
         "available": logs_directory().is_dir(),

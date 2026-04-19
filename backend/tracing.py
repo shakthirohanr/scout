@@ -19,9 +19,22 @@ def _sanitize(s: str) -> str:
 class SolverTracer:
     """Append-only JSONL event tracer. Flushes every write for tail -f streaming."""
 
-    def __init__(self, challenge_name: str, model_id: str, log_dir: str = "logs") -> None:
+    def __init__(
+        self,
+        challenge_name: str,
+        model_id: str,
+        log_dir: str | None = None,
+        challenge_id: str | None = None,
+    ) -> None:
+        if log_dir is None:
+            from backend.log_reader import LOGS_DIR
+
+            log_dir = str(LOGS_DIR)
+        self.challenge_id = challenge_id
         ts = time.strftime("%Y%m%d-%H%M%S")
-        self.path = str(Path(log_dir) / f"trace-{_sanitize(challenge_name)}-{_sanitize(model_id)}-{ts}.jsonl")
+        self.path = str(
+            Path(log_dir) / f"trace-{_sanitize(challenge_name)}-{_sanitize(model_id)}-{ts}.jsonl"
+        )
         try:
             Path(log_dir).mkdir(parents=True, exist_ok=True)
             self._fh = open(self.path, "a")
@@ -50,18 +63,40 @@ class SolverTracer:
         self._write({"type": "tool_call", "tool": tool_name, "args": args_str[:2000], "step": step})
 
     def tool_result(self, tool_name: str, result: str, step: int) -> None:
-        self._write({"type": "tool_result", "tool": tool_name, "result": result[:2000], "step": step})
+        self._write(
+            {"type": "tool_result", "tool": tool_name, "result": result[:2000], "step": step}
+        )
 
-    def model_response(self, text: str, step: int, input_tokens: int = 0, output_tokens: int = 0) -> None:
-        self._write({"type": "model_response", "text": text[:1000], "step": step,
-                      "input_tokens": input_tokens, "output_tokens": output_tokens})
+    def model_response(
+        self, text: str, step: int, input_tokens: int = 0, output_tokens: int = 0
+    ) -> None:
+        self._write(
+            {
+                "type": "model_response",
+                "text": text[:1000],
+                "step": step,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        )
 
-    def usage(self, input_tokens: int, output_tokens: int, cache_read: int, cost_usd: float) -> None:
-        self._write({"type": "usage", "input_tokens": input_tokens, "output_tokens": output_tokens,
-                      "cache_read_tokens": cache_read, "cost_usd": round(cost_usd, 6)})
+    def usage(
+        self, input_tokens: int, output_tokens: int, cache_read: int, cost_usd: float
+    ) -> None:
+        self._write(
+            {
+                "type": "usage",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_read_tokens": cache_read,
+                "cost_usd": round(cost_usd, 6),
+            }
+        )
 
     def event(self, kind: str, **kwargs) -> None:
-        challenge_id = os.environ.get("CTF_AGENT_CHALLENGE_ID", "").strip()
-        if challenge_id and "challenge_id" not in kwargs:
-            kwargs["challenge_id"] = challenge_id
+        if self.challenge_id and "challenge_id" not in kwargs:
+            kwargs["challenge_id"] = self.challenge_id
+        challenge_id_env = os.environ.get("CTF_AGENT_CHALLENGE_ID", "").strip()
+        if challenge_id_env and "challenge_id" not in kwargs:
+            kwargs["challenge_id"] = challenge_id_env
         self._write({"type": kind, **kwargs})

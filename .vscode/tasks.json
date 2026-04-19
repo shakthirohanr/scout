@@ -20,7 +20,7 @@
 		{
 			"label": "Start Backend (Postgres)",
 			"type": "shell",
-			"command": "uv run ctf-api",
+			"command": "uv run cryptoagent-api",
 			"options": {
 				"cwd": "${workspaceFolder}/backend",
 				"env": {

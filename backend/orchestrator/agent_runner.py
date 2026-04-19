@@ -207,6 +207,7 @@ class AgentRunner:
             settings=settings,
             model_specs=run.model_specs,
             no_submit=no_submit,
+            challenge_id=run.challenge_id,
         )
         run._swarm = swarm
         run.status = "running"

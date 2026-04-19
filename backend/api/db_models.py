@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.api.database import Base
 from backend.api.utils import utcnow
-
-
 
 
 class CTFSource(Base):
@@ -25,8 +24,13 @@ class CTFSource(Base):
     last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_import_status: Mapped[str] = mapped_column(String(32), nullable=False, default="never")
     last_import_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    import_progress_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    import_progress_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    import_progress_message: Mapped[str] = mapped_column(String(512), nullable=False, default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -46,7 +50,9 @@ class Challenge(Base):
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    ctf_id: Mapped[int] = mapped_column(ForeignKey("ctf_sources.id", ondelete="CASCADE"), nullable=False)
+    ctf_id: Mapped[int] = mapped_column(
+        ForeignKey("ctf_sources.id", ondelete="CASCADE"), nullable=False
+    )
     external_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     name: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -61,7 +67,9 @@ class Challenge(Base):
     distfile_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     solves: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="idle")
     latest_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -89,12 +97,16 @@ class ChallengeFile(Base):
     __table_args__ = (UniqueConstraint("challenge_id", "filename", name="uq_challenge_file_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    challenge_id: Mapped[str] = mapped_column(ForeignKey("challenges.id", ondelete="CASCADE"), nullable=False)
+    challenge_id: Mapped[str] = mapped_column(
+        ForeignKey("challenges.id", ondelete="CASCADE"), nullable=False
+    )
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     local_path: Mapped[str] = mapped_column(String(2048), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
     challenge: Mapped[Challenge] = relationship("Challenge", back_populates="files")
 
@@ -118,7 +130,9 @@ class SolverRun(Base):
     trace_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

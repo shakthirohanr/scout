@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,11 +20,13 @@ from backend.api.repositories.ctf_repository import (
     replace_challenge_files,
     set_import_status,
     slugify,
+    update_import_progress,
     upsert_challenge,
 )
-from backend.api.services.mappers import ctf_source_to_dict
-from backend.api.schemas import CTFImportRequest, CTFImportResponse
+from backend.api.schemas import CTFImportRequest, CTFImportStartedResponse
 from backend.api.utils import utcnow_iso
+
+logger = logging.getLogger(__name__)
 
 
 NONCE_PATTERNS = (
@@ -162,6 +166,7 @@ class CTFdImportClient:
                 continue
 
             from urllib.parse import urlparse
+
             url_path = urlparse(absolute_url).path
             raw_fname = url_path.rstrip("/").rsplit("/", 1)[-1] or "file"
             filename = raw_fname.split("?")[0].split("#")[0] or "file"
@@ -169,7 +174,10 @@ class CTFdImportClient:
             cd = response.headers.get("content-disposition", "")
             if cd:
                 import re
-                cd_match = re.search(r'filename\*?=["\']?(?:UTF-8\'\')?([^"\';\r\n]+)', cd, re.IGNORECASE)
+
+                cd_match = re.search(
+                    r'filename\*?=["\']?(?:UTF-8\'\')?([^"\';\r\n]+)', cd, re.IGNORECASE
+                )
                 if cd_match:
                     cd_fname = cd_match.group(1).strip().strip("\"'")
                     if cd_fname:
@@ -225,7 +233,31 @@ def _metadata_payload(challenge: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
+async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportStartedResponse:
+    root = Path(request.challenges_root).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    with session_scope() as session:
+        ctf_source = get_or_create_ctf_source(
+            session,
+            name=request.name,
+            base_url=request.ctfd_url,
+            auth_mode=request.auth_mode,
+            challenges_root=str(root),
+        )
+        ctf_id = ctf_source.id
+        set_import_status(session, ctf_source, status="running")
+
+    asyncio.create_task(_run_import(ctf_id, request))
+
+    return CTFImportStartedResponse(
+        ctf_id=ctf_id,
+        status="running",
+        generated_at=utcnow_iso(),
+    )
+
+
+async def _run_import(ctf_id: int, request: CTFImportRequest) -> None:
     client = CTFdImportClient(
         base_url=request.ctfd_url,
         auth_mode=request.auth_mode,
@@ -238,7 +270,6 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
         await client.authenticate()
 
         root = Path(request.challenges_root).expanduser().resolve()
-        root.mkdir(parents=True, exist_ok=True)
 
         with session_scope() as session:
             ctf_source = get_or_create_ctf_source(
@@ -250,10 +281,16 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
             )
             ctf_root = root / ctf_source.slug
             ctf_root.mkdir(parents=True, exist_ok=True)
-            set_import_status(session, ctf_source, status="running")
+            update_import_progress(
+                session,
+                ctf_source,
+                total=0,
+                completed=0,
+                message="Fetching challenge list...",
+            )
 
         challenge_details = await client.fetch_all_challenges()
-        imported_count = 0
+        total_challenges = len(challenge_details)
         downloaded_files = 0
         prepared: list[dict[str, Any]] = []
 
@@ -265,12 +302,18 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
                 auth_mode=request.auth_mode,
                 challenges_root=str(root),
             )
-            ctf_slug = source.slug
+            update_import_progress(
+                session,
+                source,
+                total=total_challenges,
+                completed=0,
+                message=f"Processing 0/{total_challenges} challenges...",
+            )
 
-        ctf_root = root / ctf_slug
+        ctf_root = root / source.slug
         ctf_root.mkdir(parents=True, exist_ok=True)
 
-        for challenge_data in challenge_details:
+        for idx, challenge_data in enumerate(challenge_details):
             challenge_name = str(challenge_data.get("name") or "challenge")
             challenge_slug = slugify(challenge_name)
             challenge_dir = ctf_root / challenge_slug
@@ -300,6 +343,38 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
                 }
             )
 
+            with session_scope() as session:
+                src = get_or_create_ctf_source(
+                    session,
+                    name=request.name,
+                    base_url=request.ctfd_url,
+                    auth_mode=request.auth_mode,
+                    challenges_root=str(root),
+                )
+                update_import_progress(
+                    session,
+                    src,
+                    total=total_challenges,
+                    completed=idx + 1,
+                    message=f"Processing {idx + 1}/{total_challenges} challenges...",
+                )
+
+        with session_scope() as session:
+            ctf_source = get_or_create_ctf_source(
+                session,
+                name=request.name,
+                base_url=request.ctfd_url,
+                auth_mode=request.auth_mode,
+                challenges_root=str(root),
+            )
+            update_import_progress(
+                session,
+                ctf_source,
+                total=total_challenges,
+                completed=total_challenges,
+                message=f"Saving {total_challenges} challenges to database...",
+            )
+
         with session_scope() as session:
             ctf_source = get_or_create_ctf_source(
                 session,
@@ -309,6 +384,7 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
                 challenges_root=str(root),
             )
 
+            imported_count = 0
             for item in prepared:
                 challenge_data = item["challenge_data"]
                 downloaded = item["downloaded"]
@@ -347,16 +423,12 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
                 imported_count += 1
 
             set_import_status(session, ctf_source, status="success")
-            source_summary = ctf_source_to_dict(ctf_source, challenge_count=imported_count)
+            logger.info(
+                "CTF import completed: %d challenges, %d files", imported_count, downloaded_files
+            )
 
-        return CTFImportResponse(
-            ctf=source_summary,
-            imported_challenges=imported_count,
-            downloaded_files=downloaded_files,
-            root_directory=str((Path(root) / str(source_summary["slug"])).resolve()),
-            generated_at=utcnow_iso(),
-        )
     except Exception as exc:
+        logger.exception("CTF import failed")
         with session_scope() as session:
             source = get_or_create_ctf_source(
                 session,
@@ -366,6 +438,5 @@ async def import_ctf_challenges(request: CTFImportRequest) -> CTFImportResponse:
                 challenges_root=str(Path(request.challenges_root).expanduser().resolve()),
             )
             set_import_status(session, source, status="failed", error=str(exc))
-        raise
     finally:
         await client.close()

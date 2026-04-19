@@ -61,18 +61,10 @@ export type TraceSummary = {
   flag: string | null;
 };
 
-export type ChallengeItem = {
-  id: string;
-  name: string;
-  state: ChallengeRunState;
-  traceCount: number;
-  startedAt: string | null;
-  finishedAt: string | null;
-  updatedAt: string | null;
-  latestFlag: string | null;
-  latestTraceId: string | null;
-  activeRunIds: string[];
+export type TraceListResponse = {
   traces: TraceSummary[];
+  available: boolean;
+  generatedAt: string;
 };
 
 export type ChallengeCatalogItem = {
@@ -112,6 +104,9 @@ export type CTFSourceSummary = {
   lastImportAt: string | null;
   lastImportStatus: string;
   lastImportError: string;
+  importProgressTotal: number;
+  importProgressCompleted: number;
+  importProgressMessage: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -132,13 +127,6 @@ export type TraceDetail = {
   terminalOutput: string;
 };
 
-export type TraceListResponse = {
-  traces: TraceSummary[];
-  available: boolean;
-  generatedAt: string;
-  logsDirectory: string;
-};
-
 export type SteeringChallengeResult = {
   runId: string | null;
   challengeId: string;
@@ -152,4 +140,15 @@ export type CapacityInfo = {
   activeAgents: number;
   maxAgents: number;
   available: number;
+};
+
+export type CTFImportProgress = {
+  status: string;
+  ctfId: number | null;
+  ctfName: string | null;
+  challengeCount: number;
+  importProgressTotal: number;
+  importProgressCompleted: number;
+  importProgressMessage: string;
+  lastImportError: string | null;
 };

@@ -183,8 +183,10 @@ def build_prompt(
             if not has_inputs
             else "0. Continue solving if you have at least one of: service connection info OR attached files."
         ),
-        "1. " + (
-            "Inspect distfiles and reverse locally first." if is_pwnish
+        "1. "
+        + (
+            "Inspect distfiles and reverse locally first."
+            if is_pwnish
             else ("Connect to the service now." if conn_info else "Inspect distfiles now.")
         ),
         "2. Keep using tools until you have the flag.",
@@ -197,9 +199,22 @@ def build_prompt(
             "For RSA: use `RsaCtfTool`, sage ECM, or `cado-nfs`."
         ),
         "   - Pwn: `stty raw -echo` before launching vulnerable binaries over nc.",
-        '4. **Ignore placeholder flags** — `CTF{flag}`, `CTF{placeholder}` are not real flags.',
+        "4. **Ignore placeholder flags** — `CTF{flag}`, `CTF{placeholder}` are not real flags.",
         final_step,
         "6. Do not guess. Do not ask. Cover maximum surface area.",
+        "",
+        "## Output Format",
+        (
+            "When you find a verified flag, you MUST return it using the structured output tool. "
+            "Do NOT output the flag as plain text or in a code block. "
+            "Use the result function with two fields: "
+            "`flag` (the exact flag string) and `method` (a one-line description of how you found it)."
+        ),
+        (
+            "Example: if the flag is `CTF{abc123}` and you found it via buffer overflow, "
+            'call the result function with flag="CTF{abc123}" and method="Buffer overflow to overwrite return address".'
+        ),
+        "Never write raw JSON yourself — always use the provided result function/tool.",
     ]
 
     if is_pwnish:

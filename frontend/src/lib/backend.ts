@@ -1,5 +1,6 @@
 import type {
   CapacityInfo,
+  CTFImportProgress,
   ChallengeCatalogItem,
   CTFSourceSummary,
   ImportCTFInput,
@@ -58,6 +59,9 @@ type BackendCTFSourceSummary = {
   last_import_at: string | null;
   last_import_status: string;
   last_import_error: string;
+  import_progress_total: number;
+  import_progress_completed: number;
+  import_progress_message: string;
   created_at: string;
   updated_at: string;
 };
@@ -76,11 +80,21 @@ type BackendCTFListResponse = {
   generated_at: string;
 };
 
-type BackendCTFImportResponse = {
-  ctf: BackendCTFSourceSummary;
-  imported_challenges: number;
-  downloaded_files: number;
-  root_directory: string;
+type BackendCTFImportStartedResponse = {
+  ctf_id: number;
+  status: string;
+  generated_at: string;
+};
+
+type BackendCTFImportStatusResponse = {
+  status: string;
+  ctf_id: number | null;
+  ctf_name: string | null;
+  challenge_count: number;
+  import_progress_total: number;
+  import_progress_completed: number;
+  import_progress_message: string;
+  last_import_error?: string;
   generated_at: string;
 };
 
@@ -177,6 +191,9 @@ function toCTFSource(item: BackendCTFSourceSummary): CTFSourceSummary {
     lastImportAt: item.last_import_at,
     lastImportStatus: item.last_import_status,
     lastImportError: item.last_import_error,
+    importProgressTotal: item.import_progress_total ?? 0,
+    importProgressCompleted: item.import_progress_completed ?? 0,
+    importProgressMessage: item.import_progress_message ?? "",
     createdAt: item.created_at,
     updatedAt: item.updated_at,
   };
@@ -221,12 +238,9 @@ export async function getCTFs(): Promise<CTFSourceSummary[]> {
 }
 
 export async function importCTF(input: ImportCTFInput): Promise<{
-  ctf: CTFSourceSummary;
-  importedChallenges: number;
-  downloadedFiles: number;
-  rootDirectory: string;
+  ctfId: number;
 }> {
-  const payload = await fetchBackend<BackendCTFImportResponse>("/api/v1/ctfs/import", {
+  const payload = await fetchBackend<BackendCTFImportStartedResponse>("/api/v1/ctfs/import", {
     method: "POST",
     body: JSON.stringify({
       name: input.name,
@@ -243,10 +257,37 @@ export async function importCTF(input: ImportCTFInput): Promise<{
   revalidateTag(CHALLENGE_CATALOG_TAG, "max");
 
   return {
-    ctf: toCTFSource(payload.ctf),
-    importedChallenges: payload.imported_challenges,
-    downloadedFiles: payload.downloaded_files,
-    rootDirectory: payload.root_directory,
+    ctfId: payload.ctf_id,
+  };
+}
+
+export async function getActiveImportStatus(): Promise<CTFImportProgress> {
+  const payload = await fetchBackend<BackendCTFImportStatusResponse>("/api/v1/ctfs/import-status");
+  return {
+    status: payload.status,
+    ctfId: payload.ctf_id,
+    ctfName: payload.ctf_name,
+    challengeCount: payload.challenge_count ?? 0,
+    importProgressTotal: payload.import_progress_total,
+    importProgressCompleted: payload.import_progress_completed,
+    importProgressMessage: payload.import_progress_message,
+    lastImportError: null,
+  };
+}
+
+export async function getCTFImportStatus(ctfId: number): Promise<CTFImportProgress> {
+  const payload = await fetchBackend<BackendCTFImportStatusResponse>(
+    `/api/v1/ctfs/${ctfId}/import-status`,
+  );
+  return {
+    status: payload.status,
+    ctfId: payload.ctf_id,
+    ctfName: payload.ctf_name,
+    challengeCount: payload.challenge_count ?? 0,
+    importProgressTotal: payload.import_progress_total,
+    importProgressCompleted: payload.import_progress_completed,
+    importProgressMessage: payload.import_progress_message,
+    lastImportError: payload.last_import_error ?? null,
   };
 }
 

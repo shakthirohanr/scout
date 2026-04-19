@@ -90,6 +90,11 @@ def _apply_schema_updates(engine) -> None:
         "steering_log_path": "VARCHAR(2048)",
         "finished_at": "TIMESTAMP",
     }
+    ctf_source_columns = {
+        "import_progress_total": "INTEGER NOT NULL DEFAULT 0",
+        "import_progress_completed": "INTEGER NOT NULL DEFAULT 0",
+        "import_progress_message": "VARCHAR(512) NOT NULL DEFAULT ''",
+    }
     solver_run_columns = {
         "steering_log_path": "VARCHAR(2048) NOT NULL DEFAULT ''",
         "flag": "TEXT",
@@ -97,6 +102,7 @@ def _apply_schema_updates(engine) -> None:
     }
 
     _ensure_columns(engine, "challenges", challenge_columns)
+    _ensure_columns(engine, "ctf_sources", ctf_source_columns)
     _ensure_columns(engine, "solver_runs", solver_run_columns)
 
 
@@ -107,15 +113,11 @@ def _ensure_columns(engine, table_name: str, columns: dict[str, str]) -> None:
 
     existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
     missing_columns = {
-        name: definition
-        for name, definition in columns.items()
-        if name not in existing_columns
+        name: definition for name, definition in columns.items() if name not in existing_columns
     }
     if not missing_columns:
         return
 
     with engine.begin() as connection:
         for name, definition in missing_columns.items():
-            connection.execute(
-                text(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}")
-            )
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}"))

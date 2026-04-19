@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import func, select
 
 from backend.api.database import session_scope
-from backend.api.repositories.ctf_repository import list_ctf_sources
+from backend.api.db_models import Challenge, CTFSource
+from backend.api.repositories.ctf_repository import get_ctf_source, list_ctf_sources
 from backend.api.schemas import CTFImportRequest, StartChallengeRequest, SteerChallengeRequest
 from backend.api.services.catalog_service import (
     delete_challenge as delete_challenge_entry,
@@ -24,7 +26,7 @@ from backend.api.services.catalog_service import (
 from backend.api.services.ctfd_import_service import CTFImportError, import_ctf_challenges
 from backend.api.services.mappers import ctf_source_to_dict
 from backend.api.state import ORCHESTRATOR
-from backend.api.utils import utcnow_iso
+from backend.api.utils import utcnow, utcnow_iso
 from backend.run_config import load_ui_config
 
 router = APIRouter(prefix="/api/v1", tags=["challenges"])
@@ -157,3 +159,75 @@ async def import_ctf(request: CTFImportRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Import failed: {exc}") from exc
 
     return response.model_dump(mode="json")
+
+
+STALE_IMPORT_THRESHOLD_SECONDS = 600
+
+
+def _check_stale_import(session, source: CTFSource) -> bool:
+    if source.last_import_status != "running":
+        return False
+    if source.updated_at is None:
+        return False
+    elapsed = (utcnow() - source.updated_at).total_seconds()
+    if elapsed > STALE_IMPORT_THRESHOLD_SECONDS:
+        from backend.api.repositories.ctf_repository import set_import_status
+
+        set_import_status(
+            session, source, status="failed", error="Import timed out (server may have restarted)."
+        )
+        return True
+    return False
+
+
+@router.get("/ctfs/import-status")
+def get_import_status() -> dict[str, Any]:
+    with session_scope() as session:
+        stmt = select(CTFSource).where(CTFSource.last_import_status == "running")
+        running = session.execute(stmt).scalar_one_or_none()
+        if not running:
+            return {"status": "idle", "ctf_id": None, "generated_at": utcnow_iso()}
+        if _check_stale_import(session, running):
+            return {"status": "idle", "ctf_id": None, "generated_at": utcnow_iso()}
+        challenge_count = (
+            session.execute(
+                select(func.count(Challenge.id)).where(Challenge.ctf_id == running.id)
+            ).scalar()
+            or 0
+        )
+        return {
+            "status": "running",
+            "ctf_id": running.id,
+            "ctf_name": running.name,
+            "challenge_count": challenge_count,
+            "import_progress_total": running.import_progress_total,
+            "import_progress_completed": running.import_progress_completed,
+            "import_progress_message": running.import_progress_message,
+            "generated_at": utcnow_iso(),
+        }
+
+
+@router.get("/ctfs/{ctf_id}/import-status")
+def get_ctf_import_status(ctf_id: int) -> dict[str, Any]:
+    with session_scope() as session:
+        source = get_ctf_source(session, ctf_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="CTF source not found.")
+        _check_stale_import(session, source)
+        challenge_count = (
+            session.execute(
+                select(func.count(Challenge.id)).where(Challenge.ctf_id == ctf_id)
+            ).scalar()
+            or 0
+        )
+        return {
+            "status": source.last_import_status,
+            "ctf_id": source.id,
+            "ctf_name": source.name,
+            "challenge_count": challenge_count,
+            "import_progress_total": source.import_progress_total,
+            "import_progress_completed": source.import_progress_completed,
+            "import_progress_message": source.import_progress_message,
+            "last_import_error": source.last_import_error,
+            "generated_at": utcnow_iso(),
+        }

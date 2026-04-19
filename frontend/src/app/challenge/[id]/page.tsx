@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { buildChallengeItems } from "@/lib/challenges";
 import { getChallengeCatalog } from "@/lib/backend";
-import { getTraceSummaries } from "@/lib/logs";
+import type { ChallengeCatalogItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,39 +15,30 @@ type ChallengePageProps = {
 
 export async function generateMetadata({ params }: ChallengePageProps): Promise<Metadata> {
   const { id } = await params;
-  const [traces, catalog] = await Promise.all([
-    getTraceSummaries(),
-    getChallengeCatalog().catch(() => []),
-  ]);
-  const challengeItems = buildChallengeItems(traces, catalog);
-  const selected = challengeItems.find((item) => item.id === id) ?? null;
+  const catalog = await getChallengeCatalog().catch(() => []);
+  const challenge = catalog.find((item) => item.id === id) ?? null;
 
   return {
-    title: selected ? selected.name : "CryptoAgent",
+    title: challenge ? challenge.name : "CryptoAgent",
   };
 }
 
 export default async function ChallengePage({ params }: ChallengePageProps) {
   const { id } = await params;
-  const [traces, catalog] = await Promise.all([
-    getTraceSummaries(),
-    getChallengeCatalog().catch(() => []),
-  ]);
-  const challengeItems = buildChallengeItems(traces, catalog);
-  const selected = challengeItems.find((item) => item.id === id) ?? null;
-  const challengeExists = Boolean(selected);
+  const catalog = await getChallengeCatalog().catch(() => [] as ChallengeCatalogItem[]);
+  const challenge = catalog.find((item) => item.id === id) ?? null;
 
-  if (!challengeExists) {
+  if (!challenge) {
     notFound();
   }
 
   return (
     <div className="h-full overflow-hidden">
       <DashboardShell
-        initialTraces={traces}
+        challengeId={id}
+        challengeName={challenge.name}
+        challengeState={challenge.state}
         catalogChallenges={catalog}
-        activeChallengeId={id}
-        activeChallengeName={selected?.name ?? null}
       />
     </div>
   );

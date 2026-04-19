@@ -49,6 +49,9 @@ class CTFSourceSummary(BaseModel):
     last_import_at: str | None
     last_import_status: str
     last_import_error: str
+    import_progress_total: int = 0
+    import_progress_completed: int = 0
+    import_progress_message: str = ""
     created_at: str
     updated_at: str
 
@@ -106,4 +109,10 @@ class CTFImportResponse(BaseModel):
     imported_challenges: int
     downloaded_files: int
     root_directory: str
+    generated_at: str
+
+
+class CTFImportStartedResponse(BaseModel):
+    ctf_id: int
+    status: str = "running"
     generated_at: str

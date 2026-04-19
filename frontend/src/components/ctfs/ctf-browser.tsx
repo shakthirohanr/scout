@@ -269,15 +269,15 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
               No CTF sources match this filter.
             </p>
           ) : (
-            <div className="max-h-[26rem] overflow-auto rounded-md border border-border">
-              <Table>
+            <div className="max-h-[26rem] overflow-y-auto overflow-x-hidden rounded-md border border-border">
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Source</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Status</TableHead>
                     <TableHead>Challenges</TableHead>
-                    <TableHead>Last Import</TableHead>
-                    <TableHead>Updated</TableHead>
+                    <TableHead className="hidden sm:table-cell">Last Import</TableHead>
+                    <TableHead className="hidden lg:table-cell">Updated</TableHead>
                     <TableHead className="w-[10rem] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -293,29 +293,45 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                         data-state={isSelected ? "selected" : undefined}
                         className={cn(isSelected && "bg-muted/30")}
                       >
-                        <TableCell>
+                        <TableCell className="align-top">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => setSelectedCtfId(ctf.id)}
-                                className="text-left text-sm font-medium text-foreground hover:text-warm-hover transition-colors"
+                                className="min-w-0 break-words text-left text-sm font-medium text-foreground transition-colors hover:text-warm-hover"
                               >
                                 {ctf.name}
                               </button>
-                              <Badge variant={deletable ? "secondary" : "outline"} className="text-xs">
+                              <Badge
+                                variant={deletable ? "secondary" : "outline"}
+                                className="shrink-0 text-xs"
+                              >
                                 {deletable ? "Imported" : "Local"}
                               </Badge>
                             </div>
-                            <p className="font-mono text-xs text-muted-foreground">{ctf.baseUrl}</p>
+                            <p className="break-all whitespace-normal font-mono text-xs text-muted-foreground">
+                              {ctf.baseUrl}
+                            </p>
+                            <div className="space-y-0.5 text-xs text-muted-foreground md:hidden">
+                              <p>Status: {ctf.lastImportStatus}</p>
+                              <p className="sm:hidden">Last import: {formatDate(ctf.lastImportAt)}</p>
+                              <p className="lg:hidden">Updated: {formatDate(ctf.updatedAt)}</p>
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{ctf.lastImportStatus}</TableCell>
+                        <TableCell className="hidden text-muted-foreground md:table-cell">
+                          {ctf.lastImportStatus}
+                        </TableCell>
                         <TableCell>{ctf.challengeCount}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(ctf.lastImportAt)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(ctf.updatedAt)}</TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
+                        <TableCell className="hidden text-muted-foreground sm:table-cell">
+                          {formatDate(ctf.lastImportAt)}
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground lg:table-cell">
+                          {formatDate(ctf.updatedAt)}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="flex flex-wrap justify-end gap-2">
                             <Button
                               type="button"
                               variant="outline"
@@ -369,8 +385,8 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
           <CardHeader className="px-6 pt-6 pb-4 space-y-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1 w-full">
-                <CardTitle className="flex items-center justify-between text-base text-foreground">
-                  {selectedSource.name}
+                <CardTitle className="flex items-start justify-between gap-3 text-base text-foreground">
+                  <span className="break-words">{selectedSource.name}</span>
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -424,17 +440,17 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
                   : "No challenges available for this source."}
               </p>
             ) : (
-              <div className="max-h-[32rem] overflow-auto rounded-md border border-border">
-                <Table>
+              <div className="max-h-[32rem] overflow-y-auto overflow-x-hidden rounded-md border border-border">
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Challenge</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>Runs</TableHead>
-                      <TableHead>State</TableHead>
-                      <TableHead>Updated</TableHead>
-                      <TableHead className="min-w-[12rem]">Path</TableHead>
+                      <TableHead className="hidden sm:table-cell">Category</TableHead>
+                      <TableHead className="hidden md:table-cell">Value</TableHead>
+                      <TableHead className="hidden lg:table-cell">Runs</TableHead>
+                      <TableHead className="hidden md:table-cell">State</TableHead>
+                      <TableHead className="hidden lg:table-cell">Updated</TableHead>
+                      <TableHead className="hidden xl:table-cell">Path</TableHead>
                       <TableHead className="w-[6rem] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -445,27 +461,41 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
 
                       return (
                         <TableRow key={challenge.id}>
-                          <TableCell>
-                            <div className="space-y-0.5">
-                              <p className="font-medium text-foreground">{challenge.name}</p>
-                              <p className="line-clamp-2 text-xs text-muted-foreground">
+                          <TableCell className="align-top">
+                            <div className="space-y-1">
+                              <p className="break-words font-medium text-foreground">{challenge.name}</p>
+                              <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
                                 {challenge.description || "No description provided."}
+                              </p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground sm:hidden">
+                                <span>{challenge.category || "uncategorized"}</span>
+                                <span>{challenge.value || 0} pts</span>
+                                <span>{challenge.state}</span>
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:hidden">
+                                <span>{challenge.runCount} runs</span>
+                                <span>Updated {formatDate(challenge.updatedAt)}</span>
+                              </div>
+                              <p className="break-all font-mono text-[11px] text-muted-foreground xl:hidden">
+                                {challenge.path}
                               </p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="hidden text-muted-foreground sm:table-cell">
                             {challenge.category || "uncategorized"}
                           </TableCell>
-                          <TableCell>{challenge.value || 0}</TableCell>
-                          <TableCell>{challenge.runCount}</TableCell>
-                          <TableCell className="text-muted-foreground">{challenge.state}</TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell className="hidden md:table-cell">{challenge.value || 0}</TableCell>
+                          <TableCell className="hidden lg:table-cell">{challenge.runCount}</TableCell>
+                          <TableCell className="hidden text-muted-foreground md:table-cell">
+                            {challenge.state}
+                          </TableCell>
+                          <TableCell className="hidden text-muted-foreground lg:table-cell">
                             {formatDate(challenge.updatedAt)}
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
+                          <TableCell className="hidden break-all font-mono text-xs text-muted-foreground xl:table-cell">
                             {challenge.path}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top">
                             <div className="flex justify-end">
                               <Button
                                 type="button"

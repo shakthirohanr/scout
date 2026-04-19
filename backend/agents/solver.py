@@ -61,7 +61,11 @@ class TracingToolset(WrapperToolset[SolverDeps]):
     record_usage_cb: Any = field(repr=False)
 
     async def call_tool(
-        self, name: str, tool_args: dict[str, Any], ctx: RunContext[SolverDeps], tool: ToolsetTool[SolverDeps]
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext[SolverDeps],
+        tool: ToolsetTool[SolverDeps],
     ) -> Any:
         self.step_counter[0] += 1
         step = self.step_counter[0]
@@ -71,7 +75,9 @@ class TracingToolset(WrapperToolset[SolverDeps]):
         usage_diff = RunUsage(
             input_tokens=max(0, current_usage.input_tokens - last_usage.input_tokens),
             output_tokens=max(0, current_usage.output_tokens - last_usage.output_tokens),
-            cache_read_tokens=max(0, current_usage.cache_read_tokens - last_usage.cache_read_tokens),
+            cache_read_tokens=max(
+                0, current_usage.cache_read_tokens - last_usage.cache_read_tokens
+            ),
         )
         if usage_diff.has_values():
             self.record_usage_cb(usage_diff)
@@ -96,7 +102,7 @@ class TracingToolset(WrapperToolset[SolverDeps]):
 
         result_str = str(result) if result is not None else ""
 
-        result_log = result_str.replace('\n', ' ')
+        result_log = result_str.replace("\n", " ")
         if len(result_log) > 100:
             result_log = result_log[:100] + "..."
         logger.info("[%s] Tool result: %s", self.agent_name, result_log)
@@ -113,6 +119,7 @@ class TracingToolset(WrapperToolset[SolverDeps]):
 
         if step % 5 == 0 and ctx.deps.message_bus and isinstance(result, str):
             from backend.tools.core import do_check_findings
+
             findings_text = await do_check_findings(ctx.deps.message_bus, ctx.deps.model_spec)
             if findings_text and "No new findings" not in findings_text:
                 result = f"{result}\n\n---\n{findings_text}"
@@ -123,8 +130,17 @@ class TracingToolset(WrapperToolset[SolverDeps]):
 
 def _build_toolset(deps: SolverDeps) -> FunctionToolset[SolverDeps]:
     """Build the raw toolset for a solver agent."""
-    tools = [bash, read_file, write_file, list_files, web_fetch,
-             webhook_create, webhook_get_requests, check_findings, notify_coordinator]
+    tools = [
+        bash,
+        read_file,
+        write_file,
+        list_files,
+        web_fetch,
+        webhook_create,
+        webhook_get_requests,
+        check_findings,
+        notify_coordinator,
+    ]
     if not deps.no_submit:
         tools.insert(4, submit_flag)
     if deps.use_vision:
@@ -146,6 +162,7 @@ class Solver:
         cancel_event: asyncio.Event | None = None,
         sandbox: DockerSandbox | None = None,
         owns_sandbox: bool | None = None,
+        challenge_id: str | None = None,
     ) -> None:
         self.model_spec = model_spec
         self.model_id = model_id_from_spec(model_spec)
@@ -173,7 +190,7 @@ class Solver:
             cost_tracker=cost_tracker,
         )
         self.loop_detector = LoopDetector()
-        self.tracer = SolverTracer(meta.name, self.model_id)
+        self.tracer = SolverTracer(meta.name, self.model_id, challenge_id=challenge_id)
         self.agent_name = f"{meta.name}/{self.model_id}"
         self._agent: Agent[SolverDeps, FlagFound] | None = None
         self._messages: list = []
@@ -211,9 +228,11 @@ class Solver:
             if self._last_duration_update[0] > 0:
                 duration_diff = max(0.0, now - self._last_duration_update[0])
             self._last_duration_update[0] = now
-            
+
             self.cost_tracker.record(
-                self.agent_name, usage_diff, self.model_id,
+                self.agent_name,
+                usage_diff,
+                self.model_id,
                 provider_spec=provider_from_spec(self.model_spec),
                 duration_seconds=duration_diff,
             )
@@ -233,7 +252,7 @@ class Solver:
             step_counter=self._step_count,
             agent_name=self.agent_name,
             last_usage_ref=self._last_usage,
-            record_usage_cb=_record_realtime_usage
+            record_usage_cb=_record_realtime_usage,
         )
 
         self._agent = Agent(
@@ -243,6 +262,8 @@ class Solver:
             model_settings=model_settings,
             toolsets=[toolset],
             output_type=FlagFound,
+            retries=3,
+            output_retries=5,
         )
 
         self.tracer.event("start", challenge=self.meta.name, model=self.model_id)
@@ -261,6 +282,7 @@ class Solver:
 
         try:
             from pydantic_ai.usage import UsageLimits
+
             logger.info("[%s] Agent requesting model...", self.agent_name)
             result = await self._agent.run(
                 "Solve this CTF challenge." if not self._messages else "Continue solving.",
@@ -274,17 +296,21 @@ class Solver:
             usage_diff = RunUsage(
                 input_tokens=max(0, final_usage.input_tokens - last_usage.input_tokens),
                 output_tokens=max(0, final_usage.output_tokens - last_usage.output_tokens),
-                cache_read_tokens=max(0, final_usage.cache_read_tokens - last_usage.cache_read_tokens),
+                cache_read_tokens=max(
+                    0, final_usage.cache_read_tokens - last_usage.cache_read_tokens
+                ),
             )
-            
+
             now = time.monotonic()
             duration_diff = 0.0
             if self._last_duration_update[0] > 0:
                 duration_diff = max(0.0, now - self._last_duration_update[0])
             self._last_duration_update[0] = 0.0
-            
+
             self.cost_tracker.record(
-                self.agent_name, usage_diff, self.model_id,
+                self.agent_name,
+                usage_diff,
+                self.model_id,
                 provider_spec=provider_from_spec(self.model_spec),
                 duration_seconds=duration_diff,
             )
@@ -303,19 +329,21 @@ class Solver:
 
             # Trace model responses from new messages
             from pydantic_ai.messages import ModelResponse, TextPart
+
             for msg in result.new_messages():
                 if isinstance(msg, ModelResponse):
                     text_parts = [p.content for p in msg.parts if isinstance(p, TextPart)]
                     text = " ".join(text_parts)
 
-                    log_text = text.replace('\n', ' ')
+                    log_text = text.replace("\n", " ")
                     if len(log_text) > 200:
                         log_text = log_text[:200] + "..."
                     logger.info("[%s] Analysis: %s", self.agent_name, log_text)
 
                     msg_usage = msg.usage
                     self.tracer.model_response(
-                        text[:500], self._step_count[0],
+                        text[:500],
+                        self._step_count[0],
                         input_tokens=msg_usage.input_tokens if msg_usage else 0,
                         output_tokens=msg_usage.output_tokens if msg_usage else 0,
                     )
@@ -364,10 +392,18 @@ class Solver:
         self.tracer.event("bump", insights=insights[:500])
         logger.info("[%s] Bumped with sibling insights", self.agent_name)
 
-    def _result(self, status: str, run_steps: int | None = None, run_cost: float | None = None) -> SolverResult:
+    def _result(
+        self, status: str, run_steps: int | None = None, run_cost: float | None = None
+    ) -> SolverResult:
         agent_usage = self.cost_tracker.by_agent.get(self.agent_name)
         cost = agent_usage.cost_usd if agent_usage else 0.0
-        self.tracer.event("finish", status=status, flag=self._flag, confirmed=self._confirmed, cost_usd=round(cost, 4))
+        self.tracer.event(
+            "finish",
+            status=status,
+            flag=self._flag,
+            confirmed=self._confirmed,
+            cost_usd=round(cost, 4),
+        )
         return SolverResult(
             flag=self._flag,
             status=status,

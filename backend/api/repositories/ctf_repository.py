@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -14,8 +13,6 @@ from backend.api.db_models import Challenge, ChallengeFile, CTFSource, SolverRun
 from backend.api.utils import utcnow
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
-
-
 
 
 def slugify(value: str) -> str:
@@ -103,6 +100,25 @@ def set_import_status(
     source.last_import_status = status
     source.last_import_error = error
     source.last_import_at = utcnow()
+    source.updated_at = utcnow()
+    if status in ("success", "failed"):
+        source.import_progress_total = 0
+        source.import_progress_completed = 0
+        source.import_progress_message = ""
+    session.flush()
+
+
+def update_import_progress(
+    session: Session,
+    source: CTFSource,
+    *,
+    total: int,
+    completed: int,
+    message: str,
+) -> None:
+    source.import_progress_total = total
+    source.import_progress_completed = completed
+    source.import_progress_message = message
     source.updated_at = utcnow()
     session.flush()
 
@@ -200,7 +216,9 @@ def upsert_challenge(
         challenge = session.execute(stmt).scalar_one_or_none()
 
     if challenge is None:
-        stmt = select(Challenge).where(Challenge.ctf_id == source.id, Challenge.slug == challenge_slug)
+        stmt = select(Challenge).where(
+            Challenge.ctf_id == source.id, Challenge.slug == challenge_slug
+        )
         challenge = session.execute(stmt).scalar_one_or_none()
 
     now = utcnow()

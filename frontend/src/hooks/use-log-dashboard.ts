@@ -1,13 +1,13 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { buildChallengeItems } from "@/lib/challenges";
+import { getTraceDetail, getTraces } from "@/lib/traces";
 import type {
   ChallengeCatalogItem,
+  ChallengeRunState,
   TraceDetail,
   TraceEvent,
-  TraceListResponse,
   TraceSummary,
 } from "@/lib/types";
 import { useSseEvents } from "@/hooks/use-sse-events";
@@ -20,59 +20,14 @@ const DETAIL_POLL_SSE_MS = 15000;
 const DETAIL_LIMIT = 450;
 const TERMINAL_STATES = new Set(["solved", "gave_up", "cancelled", "failed", "finished"]);
 
-function getScopedTraces(
-  traces: TraceSummary[],
-  activeChallengeId: string | null,
-  activeChallengeName: string | null,
-  catalogChallenges: ChallengeCatalogItem[],
-): TraceSummary[] {
-  if (!activeChallengeId && !activeChallengeName) {
-    return traces;
-  }
-
-  const challengeItems = buildChallengeItems(traces, catalogChallenges);
-  if (activeChallengeId) {
-    const byId = challengeItems.find((item) => item.id === activeChallengeId);
-    if (byId) {
-      return byId.traces;
-    }
-  }
-
-  if (activeChallengeName) {
-    return traces.filter((trace) => trace.challengeName === activeChallengeName);
-  }
-
-  return [];
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
 export function useLogDashboard(
-  initialTraces: TraceSummary[],
-  activeChallengeId: string | null = null,
-  activeChallengeName: string | null = null,
-  catalogChallenges: ChallengeCatalogItem[] = [],
+  challengeId: string,
+  challengeState: ChallengeRunState,
+  _activeRunIds: string[],
+  _catalogChallenges: ChallengeCatalogItem[],
 ) {
-  const [traces, setTraces] = useState(initialTraces);
-  const initialScope = getScopedTraces(
-    initialTraces,
-    activeChallengeId,
-    activeChallengeName,
-    catalogChallenges,
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialScope[0]?.id ?? null,
-  );
+  const [traces, setTraces] = useState<TraceSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TraceDetail | null>(null);
   const [listPending, setListPending] = useState(false);
   const [detailPending, setDetailPending] = useState(false);
@@ -83,12 +38,21 @@ export function useLogDashboard(
   const notifiedStatuses = useRef<Map<string, string>>(new Map());
   const sseConnectedRef = useRef(false);
 
+  const isInitializing =
+    (challengeState === "starting" || challengeState === "running") && traces.length === 0;
+
+  const noTracesFound =
+    !isInitializing &&
+    traces.length === 0 &&
+    challengeState !== "idle" &&
+    challengeState !== "";
+
   const { status: runsSseStatus, subscribe: subscribeRuns } = useSseEvents(
-    "/api/events/runs",
+    "/api/v1/events/runs",
   );
 
   const { status: traceSseStatus, subscribe: subscribeTrace } = useSseEvents(
-    selectedId ? `/api/events/traces/${encodeURIComponent(selectedId)}` : null,
+    selectedId ? `/api/v1/events/traces/${encodeURIComponent(selectedId)}` : null,
   );
 
   const sseConnected = runsSseStatus === "connected" || traceSseStatus === "connected";
@@ -172,7 +136,7 @@ export function useLogDashboard(
     setListPending(true);
 
     try {
-      const payload = await fetchJson<TraceListResponse>("/api/logs");
+      const payload = await getTraces(challengeId);
 
       startTransition(() => {
         setTraces(payload.traces);
@@ -195,24 +159,18 @@ export function useLogDashboard(
       }
 
       startTransition(() => {
-        const scopedTraces = getScopedTraces(
-          payload.traces,
-          activeChallengeId,
-          activeChallengeName,
-          catalogChallenges,
-        );
-        const scopedTraceIds = new Set(scopedTraces.map((trace) => trace.id));
+        const traceIds = new Set(payload.traces.map((t) => t.id));
 
         setSelectedId((current) => {
-          if (!scopedTraceIds.size) {
+          if (!traceIds.size) {
             return null;
           }
 
-          if (current && scopedTraceIds.has(current)) {
+          if (current && traceIds.has(current)) {
             return current;
           }
 
-          return scopedTraces[0]?.id ?? null;
+          return payload.traces[0]?.id ?? null;
         });
       });
     } catch (caughtError) {
@@ -236,9 +194,7 @@ export function useLogDashboard(
     setDetailPending(true);
 
     try {
-      const payload = await fetchJson<TraceDetail>(
-        `/api/logs/${encodeURIComponent(traceId)}?limit=${DETAIL_LIMIT}`,
-      );
+      const payload = await getTraceDetail(traceId, DETAIL_LIMIT);
 
       startTransition(() => {
         setDetail(payload);
@@ -267,15 +223,9 @@ export function useLogDashboard(
     setDetailPending(true);
 
     try {
-      const payload = await fetchJson<TraceListResponse>("/api/logs");
+      const payload = await getTraces(challengeId);
       let nextSelectedId = selectedId;
-      const scopedTraces = getScopedTraces(
-        payload.traces,
-        activeChallengeId,
-        activeChallengeName,
-        catalogChallenges,
-      );
-      const scopedTraceIds = new Set(scopedTraces.map((trace) => trace.id));
+      const traceIds = new Set(payload.traces.map((t) => t.id));
 
       startTransition(() => {
         setTraces(payload.traces);
@@ -283,7 +233,7 @@ export function useLogDashboard(
         setError(null);
       });
 
-      if (!scopedTraceIds.size) {
+      if (!traceIds.size) {
         startTransition(() => {
           setSelectedId(null);
           setDetail(null);
@@ -291,8 +241,8 @@ export function useLogDashboard(
         return;
       }
 
-      if (!nextSelectedId || !scopedTraceIds.has(nextSelectedId)) {
-        nextSelectedId = scopedTraces[0]?.id ?? null;
+      if (!nextSelectedId || !traceIds.has(nextSelectedId)) {
+        nextSelectedId = payload.traces[0]?.id ?? null;
       }
 
       startTransition(() => {
@@ -300,9 +250,7 @@ export function useLogDashboard(
       });
 
       if (nextSelectedId) {
-        const detailPayload = await fetchJson<TraceDetail>(
-          `/api/logs/${encodeURIComponent(nextSelectedId)}?limit=${DETAIL_LIMIT}`,
-        );
+        const detailPayload = await getTraceDetail(nextSelectedId, DETAIL_LIMIT);
 
         startTransition(() => {
           setDetail(detailPayload);
@@ -329,15 +277,9 @@ export function useLogDashboard(
     const pollMs = sseConnectedRef.current ? TRACE_POLL_SSE_MS : TRACE_POLL_MS;
 
     const intervalId = window.setInterval(() => {
-      const scopedTraces = getScopedTraces(
-        traces,
-        activeChallengeId,
-        activeChallengeName,
-        catalogChallenges,
-      );
       const allTerminal =
-        scopedTraces.length > 0 &&
-        scopedTraces.every((t) => TERMINAL_STATES.has(t.status));
+        traces.length > 0 &&
+        traces.every((t) => TERMINAL_STATES.has(t.status));
       if (allTerminal) {
         return;
       }
@@ -351,22 +293,16 @@ export function useLogDashboard(
 
   useEffect(() => {
     setSelectedId((current) => {
-      const scopedTraces = getScopedTraces(
-        traces,
-        activeChallengeId,
-        activeChallengeName,
-        catalogChallenges,
-      );
-      const ids = new Set(scopedTraces.map((trace) => trace.id));
+      const ids = new Set(traces.map((t) => t.id));
       if (!ids.size) {
         return null;
       }
       if (current && ids.has(current)) {
         return current;
       }
-      return scopedTraces[0]?.id ?? null;
+      return traces[0]?.id ?? null;
     });
-  }, [activeChallengeId, activeChallengeName, traces, catalogChallenges]);
+  }, [traces]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -391,26 +327,10 @@ export function useLogDashboard(
     };
   }, [selectedId, sseConnected]);
 
-  const challengeItems = useMemo(
-    () => buildChallengeItems(traces, catalogChallenges),
-    [traces, catalogChallenges],
-  );
-  const activeChallenge =
-    challengeItems.find((item) => item.id === activeChallengeId)
-    ?? (activeChallengeName
-      ? challengeItems.find((item) => item.name === activeChallengeName)
-      : null)
-    ?? null;
-  const filteredTraces = activeChallenge?.traces ?? getScopedTraces(
-    traces,
-    activeChallengeId,
-    activeChallengeName,
-    catalogChallenges,
-  );
   const selectedTrace =
-    detail?.summary ?? filteredTraces.find((trace) => trace.id === selectedId) ?? null;
+    detail?.summary ?? traces.find((trace) => trace.id === selectedId) ?? null;
 
-  const totals = filteredTraces.reduce(
+  const totals = traces.reduce(
     (summary, trace) => {
       summary.sessions += 1;
       summary.toolCalls += trace.toolCalls;
@@ -436,14 +356,13 @@ export function useLogDashboard(
   );
 
   return {
-    challengeItems,
-    activeChallenge,
-    filteredTraces,
     traces,
     selectedId,
     setSelectedId,
     selectedTrace,
     detail,
+    isInitializing,
+    noTracesFound,
     listPending,
     detailPending,
     error,
