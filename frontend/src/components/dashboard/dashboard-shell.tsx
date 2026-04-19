@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, Square } from "lucide-react";
+import { RefreshCw, Square, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { LogTerminal } from "@/components/dashboard/log-terminal";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useLogDashboard } from "@/hooks/use-log-dashboard";
+import { toast } from "sonner";
 import type { ChallengeCatalogItem, TraceSummary } from "@/lib/types";
 
 type DashboardShellProps = {
@@ -41,6 +42,7 @@ export function DashboardShell({
   const router = useRouter();
   const [killPending, setKillPending] = useState(false);
   const [killError, setKillError] = useState<string | null>(null);
+  const [stopPendingIds, setStopPendingIds] = useState<Set<string>>(new Set());
   const {
     activeChallenge,
     filteredTraces,
@@ -51,6 +53,7 @@ export function DashboardShell({
     error,
     lastSyncedAt,
     refreshNow,
+    totals,
   } = useLogDashboard(
     initialTraces,
     activeChallengeId,
@@ -74,16 +77,49 @@ export function DashboardShell({
       }
 
       await refreshNow();
+      toast.success("Agent killed");
       router.push("/");
       router.refresh();
     } catch (caughtError) {
-      setKillError(
+      const errorMessage =
         caughtError instanceof Error
           ? caughtError.message
-          : "Failed to kill challenge agent.",
-      );
+          : "Failed to kill challenge agent.";
+      setKillError(errorMessage);
+      toast.error("Kill failed", { description: errorMessage });
     } finally {
       setKillPending(false);
+    }
+  }
+
+  async function handleStopRun(runId: string) {
+    if (stopPendingIds.has(runId)) return;
+
+    setStopPendingIds((prev) => new Set(prev).add(runId));
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || `Failed to stop run: ${response.status}`);
+      }
+
+      await refreshNow();
+      toast.success("Run stopped");
+    } catch (caughtError) {
+      const errorMessage =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to stop run.";
+      toast.error("Stop failed", { description: errorMessage });
+    } finally {
+      setStopPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(runId);
+        return next;
+      });
     }
   }
 
@@ -122,6 +158,23 @@ export function DashboardShell({
         </div>
 
         <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          {filteredTraces.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-surface-300 px-2.5 py-0.5 text-xs text-muted-foreground">
+                {totals.running} active
+              </span>
+              <span className="inline-flex items-center rounded-full bg-surface-300 px-2.5 py-0.5 text-xs text-muted-foreground">
+                {totals.solved} solved
+              </span>
+              <span className="inline-flex items-center rounded-full bg-surface-300 px-2.5 py-0.5 text-xs text-muted-foreground">
+                {totals.toolCalls.toLocaleString("en-US")} calls
+              </span>
+              <span className="inline-flex items-center rounded-full bg-surface-300 px-2.5 py-0.5 text-xs text-muted-foreground">
+                ${totals.costUsd.toFixed(2)}
+              </span>
+            </div>
+          )}
+
           <Card>
             <CardHeader className="space-y-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -194,7 +247,46 @@ export function DashboardShell({
             ) : null}
           </Card>
 
-          {activeChallengeId && <SteeringPanel challengeId={activeChallengeId} />}
+          {activeChallengeId && (
+            <SteeringPanel
+              challengeId={activeChallengeId}
+              activeRunIds={activeChallenge?.activeRunIds ?? []}
+            />
+          )}
+
+          {activeChallenge && activeChallenge.activeRunIds.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Active Runs</CardTitle>
+                <CardDescription className="text-xs">
+                  Stop individual runs or kill all agents for this challenge.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-1.5 pt-0">
+                {activeChallenge.activeRunIds.map((runId, index) => (
+                  <div
+                    key={runId}
+                    className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-1.5"
+                  >
+                    <span className="text-xs font-mono text-muted-foreground">
+                      Agent {index + 1}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1 px-2 text-xs"
+                      onClick={() => handleStopRun(runId)}
+                      disabled={stopPendingIds.has(runId)}
+                    >
+                      <X className="size-3" />
+                      {stopPendingIds.has(runId) ? "Stopping..." : "Stop"}
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {filteredTraces.length > 1 && (
             <Card className="min-h-0 max-h-[22rem]">

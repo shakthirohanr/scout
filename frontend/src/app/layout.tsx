@@ -4,6 +4,7 @@ import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import { SiteHeader } from "@/components/navigation/site-header";
 import { SiteSidebar } from "@/components/navigation/site-sidebar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
@@ -56,6 +57,7 @@ export default async function RootLayout({
               </div>
             </div>
           </TooltipProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

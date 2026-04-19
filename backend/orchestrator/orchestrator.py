@@ -28,6 +28,7 @@ from backend.api.repositories.run_repository import (
     list_runs as list_persisted_runs,
 )
 from backend.api.services.mappers import solver_run_to_dict
+from backend.api.services.run_helpers import snapshot_persisted_run
 from backend.config import Settings, get_settings
 from backend.log_reader import list_trace_summaries, logs_directory
 from backend.orchestrator.agent_runner import AgentRun, AgentRunner
@@ -62,6 +63,17 @@ class AgentOrchestrator:
         self._health_task: asyncio.Task | None = None
         self._sync_task: asyncio.Task | None = None
         self._started = False
+        self._ready = False
+        settings = get_settings()
+        self._max_concurrent_agents = settings.max_concurrent_challenges
+
+    @property
+    def active_agent_count(self) -> int:
+        return len(self.agent_runner._runs)
+
+    @property
+    def max_agent_count(self) -> int:
+        return self._max_concurrent_agents
 
     async def start(self) -> None:
         if self._started:
@@ -75,8 +87,11 @@ class AgentOrchestrator:
         with contextlib.suppress(Exception):
             await cleanup_orphan_containers()
 
+        self._recover_orphaned_runs()
+
         self._health_task = asyncio.create_task(self._health_loop(), name="orchestrator-health")
         self._sync_task = asyncio.create_task(self._sync_loop(), name="orchestrator-sync")
+        self._ready = True
         logger.info("AgentOrchestrator started")
 
     async def shutdown(self) -> None:
@@ -94,7 +109,41 @@ class AgentOrchestrator:
 
         await self.agent_runner.shutdown()
         self._started = False
+        self._ready = False
         logger.info("AgentOrchestrator shut down")
+
+    def _recover_orphaned_runs(self) -> None:
+        with session_scope() as session:
+            for persisted_run in list_active_runs(session):
+                existing = self.agent_runner.get_run(persisted_run.id)
+                if existing is not None:
+                    continue
+                snapshot = {
+                    "id": persisted_run.id,
+                    "challenge_id": persisted_run.challenge_id,
+                    "mode": persisted_run.mode,
+                    "status": "failed",
+                    "command": json.loads(persisted_run.command_json or "[]"),
+                    "workdir": persisted_run.workdir,
+                    "pid": None,
+                    "output_log_path": persisted_run.output_log_path,
+                    "steering_log_path": persisted_run.steering_log_path,
+                    "flag": persisted_run.flag,
+                    "latest_trace_id": persisted_run.latest_trace_id,
+                    "trace_ids": json.loads(persisted_run.trace_ids_json or "[]"),
+                    "exit_code": persisted_run.exit_code or 1,
+                    "created_at": persisted_run.created_at,
+                    "started_at": persisted_run.started_at,
+                    "finished_at": persisted_run.finished_at or datetime.now(UTC),
+                }
+                upsert_run(session, snapshot)
+                if persisted_run.challenge_id:
+                    persisted = get_run_by_id(session, persisted_run.id)
+                    if persisted:
+                        sync_challenge_with_run(
+                            session, challenge_id=persisted_run.challenge_id, run=persisted
+                        )
+                logger.info("Recovered orphaned run %s — marked as failed", persisted_run.id)
 
     # ── Agent lifecycle ────────────────────────────────────────────────
 
@@ -113,6 +162,12 @@ class AgentOrchestrator:
         config = load_ui_config()
         specs = model_specs or config.models or [settings.default_solver_model]
         count = max(1, agent_count)
+
+        current_active = len(self.agent_runner._runs)
+        if current_active + count > self._max_concurrent_agents:
+            raise RuntimeError(
+                f"Agent capacity reached. {current_active} agents already running, maximum is {self._max_concurrent_agents}."
+            )
 
         results: list[dict[str, Any]] = []
         for i in range(count):
@@ -163,6 +218,7 @@ class AgentOrchestrator:
         challenge_id: str,
         message: str,
         source: str = "operator",
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         text = message.strip()
         if not text:
@@ -172,19 +228,49 @@ class AgentOrchestrator:
         if not active:
             raise RuntimeError("No active run for this challenge.")
 
-        active_run = max(active, key=lambda r: r.started_at or r.created_at)
-        msg = await self.steering_bus.post(
-            challenge_id,
-            text,
-            source=source,
-            run_id=active_run.run_id,
-        )
+        if run_id is not None:
+            target = next((r for r in active if r.run_id == run_id), None)
+            if target is None:
+                raise RuntimeError(f"Run {run_id} is not active for this challenge.")
+            msg = await self.steering_bus.post(
+                challenge_id,
+                text,
+                source=source,
+                run_id=run_id,
+            )
+            return {
+                "run_id": run_id,
+                "challenge_id": challenge_id,
+                "queued": text,
+                "source": source,
+                "created_at": datetime.fromtimestamp(msg.ts, tz=UTC).isoformat(),
+            }
+
+        messages: list[dict[str, Any]] = []
+        for run in active:
+            msg = await self.steering_bus.post(
+                challenge_id,
+                text,
+                source=source,
+                run_id=run.run_id,
+            )
+            messages.append(
+                {
+                    "run_id": run.run_id,
+                    "challenge_id": challenge_id,
+                    "queued": text,
+                    "source": source,
+                    "created_at": datetime.fromtimestamp(msg.ts, tz=UTC).isoformat(),
+                }
+            )
+
         return {
-            "run_id": active_run.run_id,
+            "run_id": active[0].run_id if len(active) == 1 else None,
             "challenge_id": challenge_id,
             "queued": text,
             "source": source,
-            "created_at": datetime.fromtimestamp(msg.ts, tz=UTC).isoformat(),
+            "steered_runs": [m["run_id"] for m in messages],
+            "created_at": messages[0]["created_at"] if messages else datetime.now(UTC).isoformat(),
         }
 
     # ── Health monitoring ──────────────────────────────────────────────
@@ -232,14 +318,12 @@ class AgentOrchestrator:
                 self._sync_detached_run(session, persisted_run)
 
     def _sync_detached_run(self, session, run) -> None:
-        from backend.api.services.run_manager_service import RunManager
-
         challenge_name = None
         if run.challenge_id:
             challenge = get_challenge_by_id(session, run.challenge_id)
             challenge_name = challenge.name if challenge else None
-        snapshot = RunManager._snapshot_persisted_run(run, challenge_name=challenge_name)
-        persisted = upsert_run(session, snapshot)
+        snap = snapshot_persisted_run(run, challenge_name=challenge_name)
+        persisted = upsert_run(session, snap)
         if persisted.challenge_id:
             sync_challenge_with_run(session, challenge_id=persisted.challenge_id, run=persisted)
 

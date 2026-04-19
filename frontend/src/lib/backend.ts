@@ -1,10 +1,11 @@
 import type {
+  CapacityInfo,
   ChallengeCatalogItem,
   CTFSourceSummary,
   ImportCTFInput,
   SteeringChallengeResult,
 } from "@/lib/types";
-import { revalidateTag, unstable_cache } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8081";
 const CHALLENGE_CATALOG_TAG = "challenge-catalog";
@@ -36,6 +37,7 @@ type BackendCatalogItem = {
   run_count: number;
   latest_run_id: string | null;
   current_run_id: string | null;
+  active_run_ids: string[];
   latest_flag: string | null;
   latest_log_path: string | null;
   latest_trace_id: string | null;
@@ -116,12 +118,19 @@ type BackendDeleteCTFResponse = {
 };
 
 type BackendSteerChallengeResponse = {
-  run_id: string;
+  run_id: string | null;
   challenge_id: string;
   queued: string;
   source: string;
   created_at: string;
   generated_at: string;
+  steered_runs?: string[];
+};
+
+type BackendCapacityResponse = {
+  active_agents: number;
+  max_agents: number;
+  available: number;
 };
 
 function backendBaseUrl(): string {
@@ -145,6 +154,7 @@ function toCatalogItem(item: BackendCatalogItem): ChallengeCatalogItem {
     runCount: item.run_count,
     latestRunId: item.latest_run_id,
     currentRunId: item.current_run_id,
+    activeRunIds: item.active_run_ids ?? [],
     latestFlag: item.latest_flag,
     latestLogPath: item.latest_log_path,
     latestTraceId: item.latest_trace_id,
@@ -356,23 +366,52 @@ export async function steerChallenge(
   challengeId: string,
   message: string,
   source = "operator",
+  runId?: string | null,
 ): Promise<SteeringChallengeResult> {
+  const body: Record<string, string> = { message, source };
+  if (runId) {
+    body.run_id = runId;
+  }
+
   const payload = await fetchBackend<BackendSteerChallengeResponse>(
     `/api/v1/challenges/${encodeURIComponent(challengeId)}/steer`,
     {
       method: "POST",
-      body: JSON.stringify({
-        message,
-        source,
-      }),
+      body: JSON.stringify(body),
     },
   );
 
   return {
-    runId: payload.run_id,
+    runId: payload.run_id ?? null,
     challengeId: payload.challenge_id,
     queued: payload.queued,
     source: payload.source,
     createdAt: payload.created_at,
+    steeredRuns: payload.steered_runs,
+  };
+}
+
+export async function cancelRun(
+  runId: string,
+): Promise<{ runId: string; status: string }> {
+  const payload = await fetchBackend<{ run_id: string; status: string }>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    { method: "POST" },
+  );
+
+  revalidateTag(CHALLENGE_CATALOG_TAG, "max");
+
+  return {
+    runId: payload.run_id,
+    status: payload.status,
+  };
+}
+
+export async function getCapacity(): Promise<CapacityInfo> {
+  const payload = await fetchBackend<BackendCapacityResponse>("/api/v1/capacity");
+  return {
+    activeAgents: payload.active_agents,
+    maxAgents: payload.max_agents,
+    available: payload.available,
   };
 }

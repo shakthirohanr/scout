@@ -35,6 +35,7 @@ class StartChallengeRequest(BaseModel):
 class SteerChallengeRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     source: str = Field(default="operator", min_length=1, max_length=64)
+    run_id: str | None = None
 
 
 class CTFSourceSummary(BaseModel):
@@ -68,6 +69,7 @@ class ChallengeCatalogItem(BaseModel):
     run_count: int
     latest_run_id: str | None
     current_run_id: str | None
+    active_run_ids: list[str] = []
     latest_flag: str | None
     latest_log_path: str | None
     latest_trace_id: str | None

@@ -9,7 +9,7 @@ msg_port: 0
 api_host: 127.0.0.1
 api_port: 8081
 openai_compatible_base_url: https://api.llms.of.achyuth.dev/
-openai_compatible_api_key: 
+openai_compatible_api_key: placeholder
 default_solver_model: openai-compatible/glm-5p1-fast
 postgres_url: postgresql://postgres:postgres@127.0.0.1:5432/cryptoagent
 database_url: postgresql://postgres:postgres@127.0.0.1:5432/cryptoagent

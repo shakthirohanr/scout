@@ -60,6 +60,12 @@ function inferStatus(events: TraceEvent[]): TraceStatus {
   if (finish?.status === "cancelled") {
     return "cancelled";
   }
+  if (finish?.status === "failed") {
+    return "failed";
+  }
+  if (finish?.status === "finished") {
+    return "finished";
+  }
   if (finish?.status === "error") {
     return "error";
   }

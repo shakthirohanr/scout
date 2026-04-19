@@ -26,6 +26,16 @@ const statusStyles: Record<
     className:
       "bg-muted text-muted-foreground border-border",
   },
+  failed: {
+    label: "Failed",
+    className:
+      "bg-destructive/10 text-destructive border-destructive/20",
+  },
+  finished: {
+    label: "Finished",
+    className:
+      "bg-muted text-muted-foreground border-border",
+  },
   error: {
     label: "Error",
     className:
@@ -44,7 +54,7 @@ type StatusBadgeProps = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusStyles[status];
+  const config = statusStyles[status] ?? statusStyles.unknown;
 
   return (
     <Badge

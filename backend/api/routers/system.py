@@ -15,6 +15,17 @@ from backend.run_config import SolverRunConfig, save_ui_config
 router = APIRouter(prefix="/api/v1", tags=["system"])
 
 
+@router.get("/capacity")
+def capacity() -> dict[str, Any]:
+    active = ORCHESTRATOR.active_agent_count
+    maximum = ORCHESTRATOR.max_agent_count
+    return {
+        "active_agents": active,
+        "max_agents": maximum,
+        "available": max(0, maximum - active),
+    }
+
+
 @router.get("/info")
 def info() -> dict[str, Any]:
     return info_payload(ORCHESTRATOR.list_runs())

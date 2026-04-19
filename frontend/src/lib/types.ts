@@ -3,6 +3,8 @@ export type TraceStatus =
   | "solved"
   | "gave_up"
   | "cancelled"
+  | "failed"
+  | "finished"
   | "error"
   | "unknown";
 
@@ -69,6 +71,7 @@ export type ChallengeItem = {
   updatedAt: string | null;
   latestFlag: string | null;
   latestTraceId: string | null;
+  activeRunIds: string[];
   traces: TraceSummary[];
 };
 
@@ -88,6 +91,7 @@ export type ChallengeCatalogItem = {
   runCount: number;
   latestRunId: string | null;
   currentRunId: string | null;
+  activeRunIds: string[];
   latestFlag: string | null;
   latestLogPath: string | null;
   latestTraceId: string | null;
@@ -136,9 +140,16 @@ export type TraceListResponse = {
 };
 
 export type SteeringChallengeResult = {
-  runId: string;
+  runId: string | null;
   challengeId: string;
   queued: string;
   source: string;
   createdAt: string;
+  steeredRuns?: string[];
+};
+
+export type CapacityInfo = {
+  activeAgents: number;
+  maxAgents: number;
+  available: number;
 };

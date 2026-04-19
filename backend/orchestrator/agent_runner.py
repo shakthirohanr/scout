@@ -17,7 +17,6 @@ from backend.ctfd import CTFdClient
 from backend.log_reader import list_trace_summaries, logs_directory
 from backend.orchestrator.steering_bus import SteeringBus
 from backend.prompts import ChallengeMeta
-from backend.sandbox import configure_semaphore
 from backend.solver_base import FLAG_FOUND, SolverResult
 
 __all__ = ["AgentRun", "AgentRunner"]
@@ -93,7 +92,7 @@ def _build_trace_snapshot(
     challenge_id: str | None = None,
     run_started_at: datetime | None = None,
 ) -> dict[str, Any]:
-    from backend.api.services.run_manager_service import TERMINAL_TRACE_STATUS_TO_RUN_STATUS
+    from backend.api.services.run_helpers import TERMINAL_TRACE_STATUS_TO_RUN_STATUS
 
     summaries = list_trace_summaries()
     if trace_ids:
@@ -199,8 +198,6 @@ class AgentRunner:
 
         ctfd = CTFdClient(base_url=None, token="", username="", password="")
         cost_tracker = CostTracker()
-
-        configure_semaphore(settings.max_concurrent_challenges * len(run.model_specs))
 
         swarm = ChallengeSwarm(
             challenge_dir=run.challenge_dir,
@@ -340,6 +337,30 @@ class AgentRunner:
         )
 
     async def shutdown(self) -> None:
-        for run_id in list(self._runs.keys()):
+        for run_id, run in list(self._runs.items()):
+            if run.status in {"starting", "running"}:
+                self._write_graceful_shutdown_marker(run)
             with contextlib.suppress(Exception):
                 await self.cancel(run_id)
+
+    @staticmethod
+    def _write_graceful_shutdown_marker(run: AgentRun) -> None:
+        import json as _json
+
+        for trace_id in run.trace_ids:
+            path = logs_directory() / trace_id
+            if not path.is_file():
+                continue
+            marker = {
+                "ts": __import__("time").time(),
+                "type": "finish",
+                "status": "cancelled",
+                "flag": None,
+                "confirmed": False,
+                "graceful_shutdown": True,
+            }
+            try:
+                with open(path, "a", encoding="utf-8") as handle:
+                    handle.write(_json.dumps(marker, ensure_ascii=True) + "\n")
+            except Exception:
+                continue

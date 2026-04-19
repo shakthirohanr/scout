@@ -107,6 +107,7 @@ async def steer_challenge(challenge_id: str, request: SteerChallengeRequest) -> 
             challenge_id=challenge_id,
             message=request.message,
             source=request.source,
+            run_id=request.run_id,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Challenge not found.") from exc

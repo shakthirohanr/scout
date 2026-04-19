@@ -1,17 +1,22 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { buildChallengeItems } from "@/lib/challenges";
 import type {
   ChallengeCatalogItem,
   TraceDetail,
+  TraceEvent,
   TraceListResponse,
   TraceSummary,
 } from "@/lib/types";
+import { useSseEvents } from "@/hooks/use-sse-events";
+import { toast } from "sonner";
 
 const TRACE_POLL_MS = 5000;
+const TRACE_POLL_SSE_MS = 15000;
 const DETAIL_POLL_MS = 3500;
+const DETAIL_POLL_SSE_MS = 15000;
 const DETAIL_LIMIT = 450;
 const TERMINAL_STATES = new Set(["solved", "gave_up", "cancelled", "failed", "finished"]);
 
@@ -75,6 +80,88 @@ export function useLogDashboard(
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const listRequestInFlight = useRef(false);
   const detailRequestInFlight = useRef(false);
+  const notifiedStatuses = useRef<Map<string, string>>(new Map());
+  const sseConnectedRef = useRef(false);
+
+  const { status: runsSseStatus, subscribe: subscribeRuns } = useSseEvents(
+    "/api/events/runs",
+  );
+
+  const { status: traceSseStatus, subscribe: subscribeTrace } = useSseEvents(
+    selectedId ? `/api/events/traces/${encodeURIComponent(selectedId)}` : null,
+  );
+
+  const sseConnected = runsSseStatus === "connected" || traceSseStatus === "connected";
+  sseConnectedRef.current = sseConnected;
+
+  const handleRunSseEvent = useCallback(
+    (data: unknown) => {
+      const payload = data as {
+        run_id?: string;
+        challenge_id?: string;
+        status?: string;
+        timestamp?: string;
+      };
+
+      if (payload.run_id && payload.status) {
+        setTraces((prev) => {
+          return prev.map((trace) => {
+            if (trace.challengeId === payload.challenge_id || trace.id === payload.run_id) {
+              const newStatus = payload.status as TraceSummary["status"];
+              const prevStatus = notifiedStatuses.current.get(trace.id);
+              if (prevStatus === "running" && prevStatus !== newStatus) {
+                if (newStatus === "solved") {
+                  toast.success("Challenge solved!", { description: trace.challengeName });
+                } else if (newStatus === "error" || newStatus === "failed") {
+                  toast.error("Agent failed", { description: trace.challengeName });
+                } else if (newStatus === "gave_up") {
+                  toast("Agent gave up", { description: trace.challengeName });
+                }
+              }
+              notifiedStatuses.current.set(trace.id, newStatus);
+              return { ...trace, status: newStatus };
+            }
+            return trace;
+          });
+        });
+      }
+    },
+    [],
+  );
+
+  const handleTraceSseEvent = useCallback(
+    (data: unknown) => {
+      const payload = data as { trace_id?: string; event?: TraceEvent };
+      if (!payload.event) return;
+
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          events: [...prev.events, payload.event!],
+        };
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const unsub1 = subscribeRuns("run_started", handleRunSseEvent);
+    const unsub2 = subscribeRuns("run_status_changed", handleRunSseEvent);
+    const unsub3 = subscribeRuns("run_finished", handleRunSseEvent);
+    return () => {
+      unsub1();
+      unsub2();
+      unsub3();
+    };
+  }, [subscribeRuns, handleRunSseEvent]);
+
+  useEffect(() => {
+    const unsub = subscribeTrace("trace_event", handleTraceSseEvent);
+    return () => {
+      unsub();
+    };
+  }, [subscribeTrace, handleTraceSseEvent]);
 
   const refreshTraceList = useEffectEvent(async () => {
     if (listRequestInFlight.current) {
@@ -92,6 +179,20 @@ export function useLogDashboard(
         setLastSyncedAt(payload.generatedAt);
         setError(null);
       });
+
+      for (const trace of payload.traces) {
+        const prev = notifiedStatuses.current.get(trace.id);
+        if (prev === "running" && prev !== trace.status) {
+          if (trace.status === "solved") {
+            toast.success("Challenge solved!", { description: trace.challengeName });
+          } else if (trace.status === "error" || trace.status === "failed") {
+            toast.error("Agent failed", { description: trace.challengeName });
+          } else if (trace.status === "gave_up") {
+            toast("Agent gave up", { description: trace.challengeName });
+          }
+        }
+        notifiedStatuses.current.set(trace.id, trace.status);
+      }
 
       startTransition(() => {
         const scopedTraces = getScopedTraces(
@@ -225,8 +326,9 @@ export function useLogDashboard(
   useEffect(() => {
     void refreshTraceList();
 
+    const pollMs = sseConnectedRef.current ? TRACE_POLL_SSE_MS : TRACE_POLL_MS;
+
     const intervalId = window.setInterval(() => {
-      // Stop polling if all scoped traces have reached a terminal state
       const scopedTraces = getScopedTraces(
         traces,
         activeChallengeId,
@@ -240,12 +342,12 @@ export function useLogDashboard(
         return;
       }
       void refreshTraceList();
-    }, TRACE_POLL_MS);
+    }, pollMs);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [sseConnected]);
 
   useEffect(() => {
     setSelectedId((current) => {
@@ -274,19 +376,20 @@ export function useLogDashboard(
 
     void refreshTraceDetail(selectedId);
 
+    const pollMs = sseConnectedRef.current ? DETAIL_POLL_SSE_MS : DETAIL_POLL_MS;
+
     const intervalId = window.setInterval(() => {
-      // Stop polling detail if the selected trace is in a terminal state
       const currentTrace = traces.find((t) => t.id === selectedId);
       if (currentTrace && TERMINAL_STATES.has(currentTrace.status)) {
         return;
       }
       void refreshTraceDetail(selectedId);
-    }, DETAIL_POLL_MS);
+    }, pollMs);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [selectedId]);
+  }, [selectedId, sseConnected]);
 
   const challengeItems = useMemo(
     () => buildChallengeItems(traces, catalogChallenges),

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { ChallengeCatalogItem, CTFSourceSummary } from "@/lib/types";
 
 type CtfBrowserProps = {
@@ -159,12 +160,15 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
         kind: "success",
         text: `Deleted ${challenge.name}. Removed ${payload.deletedRuns ?? 0} runs and ${payload.filesRemoved ?? 0} log files.`,
       });
+      toast.success("Challenge deleted");
       router.refresh();
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete challenge.";
       setNotice({
         kind: "error",
-        text: error instanceof Error ? error.message : "Failed to delete challenge.",
+        text: errorMessage,
       });
+      toast.error("Delete failed", { description: errorMessage });
     } finally {
       setPendingKey(null);
     }
@@ -200,12 +204,15 @@ export function CtfBrowser({ initialCtfs, initialChallenges }: CtfBrowserProps) 
         kind: "success",
         text: `Deleted ${ctf.name}. Removed ${payload.deletedChallenges ?? 0} challenges and ${payload.deletedRuns ?? 0} stored runs.`,
       });
+      toast.success("CTF deleted");
       router.refresh();
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete CTF.";
       setNotice({
         kind: "error",
-        text: error instanceof Error ? error.message : "Failed to delete CTF.",
+        text: errorMessage,
       });
+      toast.error("Delete failed", { description: errorMessage });
     } finally {
       setPendingKey(null);
     }

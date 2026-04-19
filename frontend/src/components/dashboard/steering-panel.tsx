@@ -5,18 +5,22 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type SteeringPanelProps = {
   challengeId: string;
+  activeRunIds: string[];
 };
 
 const MAX_STEERING_CHARS = 4000;
 
-export function SteeringPanel({ challengeId }: SteeringPanelProps) {
+export function SteeringPanel({ challengeId, activeRunIds }: SteeringPanelProps) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [queuedAt, setQueuedAt] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   async function handleSubmit() {
     const trimmed = message.trim();
@@ -29,10 +33,15 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
     setError(null);
 
     try {
+      const body: Record<string, string> = { message: trimmed, source: "dashboard" };
+      if (selectedRunId) {
+        body.runId = selectedRunId;
+      }
+
       const response = await fetch(`/api/challenges/${encodeURIComponent(challengeId)}/steer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, source: "dashboard" }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -43,6 +52,7 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
       const payload = (await response.json()) as { createdAt?: string };
       setQueuedAt(payload.createdAt ?? new Date().toISOString());
       setMessage("");
+      toast.success("Steering queued");
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -55,6 +65,7 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
   }
 
   const remaining = MAX_STEERING_CHARS - message.length;
+  const showRunSelector = activeRunIds.length > 1;
 
   return (
     <Card>
@@ -65,6 +76,39 @@ export function SteeringPanel({ challengeId }: SteeringPanelProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {showRunSelector && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Target:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedRunId(null)}
+              className={cn(
+                "inline-flex items-center rounded-full px-2 py-0.5 text-xs transition-colors",
+                selectedRunId === null
+                  ? "bg-surface-500 text-foreground"
+                  : "bg-surface-300 text-muted-foreground hover:text-warm-hover",
+              )}
+            >
+              All
+            </button>
+            {activeRunIds.map((runId, index) => (
+              <button
+                key={runId}
+                type="button"
+                onClick={() => setSelectedRunId(runId)}
+                className={cn(
+                  "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-mono transition-colors",
+                  selectedRunId === runId
+                    ? "bg-surface-500 text-foreground"
+                    : "bg-surface-300 text-muted-foreground hover:text-warm-hover",
+                )}
+              >
+                Agent {index + 1}
+              </button>
+            ))}
+          </div>
+        )}
+
         <Textarea
           value={message}
           onChange={(event) => setMessage(event.target.value.slice(0, MAX_STEERING_CHARS))}

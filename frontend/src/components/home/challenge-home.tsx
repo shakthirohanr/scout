@@ -2,7 +2,7 @@
 
 import { Minus, Play, Plus, RefreshCw, ShieldPlus, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useMemo, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
-import type { ChallengeCatalogItem, ChallengeRunState, ImportCTFInput } from "@/lib/types";
+import { toast } from "sonner";
+import type { CapacityInfo, ChallengeCatalogItem, ChallengeRunState, ImportCTFInput } from "@/lib/types";
 
 type ChallengeHomeProps = {
   challenges: ChallengeCatalogItem[];
@@ -60,7 +61,28 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
   const [error, setError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [agentCount, setAgentCount] = useState(1);
+  const [agentCounts, setAgentCounts] = useState<Map<string, number>>(new Map());
+  const [capacity, setCapacity] = useState<CapacityInfo | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function fetchCapacity() {
+      try {
+        const response = await fetch("/api/capacity");
+        if (!response.ok) return;
+        const data = (await response.json()) as CapacityInfo;
+        if (active) setCapacity(data);
+      } catch {}
+    }
+
+    fetchCapacity();
+    const interval = setInterval(fetchCapacity, 15000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const [name, setName] = useState("");
   const [ctfdUrl, setCtfdUrl] = useState("");
@@ -172,6 +194,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
   }
 
   function handleStart(challengeId: string) {
+    const count = agentCounts.get(challengeId) ?? 1;
     setPendingId(challengeId);
     setError(null);
 
@@ -180,7 +203,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         const response = await fetch("/api/challenges/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ challengeId, agentCount }),
+          body: JSON.stringify({ challengeId, agentCount: count }),
         });
 
         if (!response.ok) {
@@ -191,12 +214,14 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         }
 
         router.push(`/challenge/${encodeURIComponent(challengeId)}`);
+        toast.success("Solver started", { description: "Agent(s) are now running." });
       } catch (caughtError) {
-        setError(
+        const errorMessage =
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to start challenge.",
-        );
+            : "Unable to start challenge.";
+        setError(errorMessage);
+        toast.error("Failed to start", { description: errorMessage });
       } finally {
         setPendingId(null);
       }
@@ -445,6 +470,12 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
         </CardContent>
       </Card>
 
+      {capacity && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          {capacity.activeAgents}/{capacity.maxAgents} agents running
+        </p>
+      )}
+
       <section className="mb-4 flex flex-col gap-3">
         <div className="relative w-full sm:max-w-sm">
           <svg
@@ -631,7 +662,7 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                             <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface-100 px-1 py-0.5">
                               <button
                                 type="button"
-                                onClick={() => setAgentCount((c) => Math.max(1, c - 1))}
+                                onClick={() => setAgentCounts((prev) => { const next = new Map(prev); next.set(challenge.id, Math.max(1, (next.get(challenge.id) ?? 1) - 1)); return next; })}
                                 disabled={challengeBusy}
                                 className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
                                 aria-label="Decrease agent count"
@@ -639,11 +670,11 @@ export function ChallengeHome({ challenges }: ChallengeHomeProps) {
                                 <Minus className="size-3.5" />
                               </button>
                               <span className="min-w-[2ch] text-center text-xs font-medium tabular-nums text-foreground">
-                                {agentCount}
+                                {agentCounts.get(challenge.id) ?? 1}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setAgentCount((c) => Math.min(10, c + 1))}
+                                onClick={() => setAgentCounts((prev) => { const next = new Map(prev); next.set(challenge.id, Math.min(10, (next.get(challenge.id) ?? 1) + 1)); return next; })}
                                 disabled={challengeBusy}
                                 className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
                                 aria-label="Increase agent count"

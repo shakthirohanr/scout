@@ -64,6 +64,7 @@ export function buildChallengeItems(
           : catalogItem.updatedAt,
       latestFlag: catalogItem.latestFlag,
       latestTraceId: catalogItem.latestTraceId,
+      activeRunIds: catalogItem.activeRunIds,
       traces: challengeTraces,
     });
   }
@@ -92,6 +93,7 @@ export function buildChallengeItems(
       updatedAt: challengeTraces[0]?.updatedAt ?? null,
       latestFlag: challengeTraces.find((trace) => trace.flag)?.flag ?? null,
       latestTraceId: challengeTraces[0]?.id ?? null,
+      activeRunIds: [],
       traces: challengeTraces,
     });
   }

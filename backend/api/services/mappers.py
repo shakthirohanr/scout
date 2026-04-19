@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from backend.api.db_models import Challenge, CTFSource, SolverRun
+from backend.api.repositories.run_repository import ACTIVE_RUN_STATUSES
 
 
 def iso_or_none(value: datetime | None) -> str | None:
@@ -29,6 +30,7 @@ def ctf_source_to_dict(source: CTFSource, challenge_count: int = 0) -> dict[str,
 
 
 def challenge_to_dict(challenge: Challenge) -> dict[str, object]:
+    active_run_ids = [run.id for run in challenge.runs if run.status in ACTIVE_RUN_STATUSES]
     return {
         "id": challenge.id,
         "ctf_id": challenge.ctf_id,
@@ -45,6 +47,7 @@ def challenge_to_dict(challenge: Challenge) -> dict[str, object]:
         "run_count": len(challenge.runs),
         "latest_run_id": challenge.latest_run_id,
         "current_run_id": challenge.current_run_id,
+        "active_run_ids": active_run_ids,
         "latest_flag": challenge.latest_flag,
         "latest_log_path": challenge.latest_log_path,
         "latest_trace_id": challenge.latest_trace_id,
